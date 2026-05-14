@@ -129,7 +129,6 @@ struct SceneBuilding
   float culledErrorScale;
   float swRasterThreshold;
   float swRasterTriangleDensityThreshold;
-  float swRasterScoreThreshold;
 
   uint sharingEnabledLevels;
   uint sharingTolerantLevels;

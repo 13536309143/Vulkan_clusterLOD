@@ -435,22 +435,11 @@ void LodClusters::onUIRender()
           PE::InputFloat("SW Min Tri Density", &m_frameConfig.swRasterTriangleDensityThreshold, 0.05f, 0.1f, "%.2f",
                          ImGuiInputTextFlags_EnterReturnsTrue,
                          "Minimum estimated triangles per projected pixel before a small cluster is diverted to compute raster");
-          PE::InputFloat("SW Score Threshold", &m_frameConfig.swRasterScoreThreshold, 0.02f, 0.05f, "%.2f",
-                         ImGuiInputTextFlags_EnterReturnsTrue,
-                         "Minimum runtime routing score before a cluster is diverted to compute raster");
           PE::Text("SW Effective Extent", "%.2f", m_frameConfig.swRasterThresholdEffective);
           PE::Text("SW Effective Density", "%.2f", m_frameConfig.swRasterTriangleDensityThresholdEffective);
-          PE::Text("SW Effective Score", "%.2f", m_frameConfig.swRasterScoreThresholdEffective);
           PE::Text("SW EMA Cluster Share", "%.3f", m_swRasterFeedback.emaSwClusterShare);
           PE::Text("SW EMA Tri Share", "%.3f", m_swRasterFeedback.emaSwTriangleShare);
-          PE::Text("SW EMA Area Share", "%.3f", m_swRasterFeedback.emaSwAreaShare);
           PE::Text("SW EMA Tri/Cluster", "%.2f", m_swRasterFeedback.emaSwTrianglesPerCluster);
-          PE::Text("SW EMA Atomic", "%.3f / %.3f", m_swRasterFeedback.emaAtomicPressureSW,
-                   m_swRasterFeedback.emaAtomicPressureAll);
-          PE::Text("SW EMA Depth", "%.3f / %.3f", m_swRasterFeedback.emaDepthRiskSW,
-                   m_swRasterFeedback.emaDepthRiskAll);
-          PE::Text("SW EMA Score", "%.3f / %.3f", m_swRasterFeedback.emaRouteScoreSW,
-                   m_swRasterFeedback.emaRouteScoreAll);
           ImGui::EndDisabled();
           ImGui::EndDisabled();
           ImGui::EndDisabled();

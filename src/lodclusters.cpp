@@ -1,7 +1,6 @@
 // LodClusters 主文件 - 实现基于LOD (Level of Detail) 技术的集群渲染系统
 // 该文件包含了LOD集群的核心功能，包括场景加载、渲染器初始化、相机控制等
 #include <thread>
-#include <cmath>
 #include <volk.h>
 #include <fmt/format.h>
 #include <nvutils/file_operations.hpp>
@@ -82,7 +81,6 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"swraster"}, &m_rendererConfig.useComputeRaster);
   m_info.parameterRegistry->add({"adaptiveraster"}, &m_rendererConfig.useAdaptiveRasterRouting);
   m_info.parameterRegistry->add({"swrasterdensity"}, &m_frameConfig.swRasterTriangleDensityThreshold);
-  m_info.parameterRegistry->add({"swrasterscore"}, &m_frameConfig.swRasterScoreThreshold);
   m_info.parameterRegistry->add({"swrasterfeedback"}, &m_frameConfig.swRasterFeedbackEnabled);
   m_info.parameterRegistry->add({"swrastertargetshare"}, &m_frameConfig.swRasterFeedbackTargetTriangleShare);
   m_info.parameterRegistry->add({"renderstats"}, &m_rendererConfig.useRenderStats);
@@ -131,7 +129,6 @@ LodClusters::LodClusters(const Info& info)
   m_frameConfig.frameConstants.lodTransitionSpeed = 1.0f;
   m_frameConfig.swRasterThresholdEffective = m_frameConfig.swRasterThreshold;
   m_frameConfig.swRasterTriangleDensityThresholdEffective = m_frameConfig.swRasterTriangleDensityThreshold;
-  m_frameConfig.swRasterScoreThresholdEffective = m_frameConfig.swRasterScoreThreshold;
   m_lastAmbientOcclusionSamples = m_frameConfig.frameConstants.ambientOcclusionSamples;
   m_sceneLoaderConfig.progressPct = &m_sceneProgress;
 }
@@ -277,32 +274,20 @@ void LodClusters::resetSwRasterFeedback()
   m_swRasterFeedback.initialized            = false;
   m_swRasterFeedback.lastBaseExtent         = m_frameConfig.swRasterThreshold;
   m_swRasterFeedback.lastBaseDensity        = m_frameConfig.swRasterTriangleDensityThreshold;
-  m_swRasterFeedback.lastBaseScore          = glm::clamp(m_frameConfig.swRasterScoreThreshold, 0.05f, 0.95f);
   m_swRasterFeedback.effectiveExtent        = m_frameConfig.swRasterThreshold;
   m_swRasterFeedback.effectiveDensity       = m_frameConfig.swRasterTriangleDensityThreshold;
-  m_swRasterFeedback.effectiveScore         = m_swRasterFeedback.lastBaseScore;
   m_swRasterFeedback.emaSwClusterShare      = 0.0f;
   m_swRasterFeedback.emaSwTriangleShare     = 0.0f;
   m_swRasterFeedback.emaSwTrianglesPerCluster = 0.0f;
-  m_swRasterFeedback.emaSwAreaShare         = 0.0f;
-  m_swRasterFeedback.emaAtomicPressureAll   = 0.0f;
-  m_swRasterFeedback.emaAtomicPressureSW    = 0.0f;
-  m_swRasterFeedback.emaDepthRiskAll        = 0.0f;
-  m_swRasterFeedback.emaDepthRiskSW         = 0.0f;
-  m_swRasterFeedback.emaRouteScoreAll       = 0.0f;
-  m_swRasterFeedback.emaRouteScoreSW        = 0.0f;
-  m_swRasterFeedback.controllerIntegral     = 0.0f;
 
   m_frameConfig.swRasterThresholdEffective = m_frameConfig.swRasterThreshold;
   m_frameConfig.swRasterTriangleDensityThresholdEffective = m_frameConfig.swRasterTriangleDensityThreshold;
-  m_frameConfig.swRasterScoreThresholdEffective = m_swRasterFeedback.lastBaseScore;
 }
 
 void LodClusters::updateSwRasterFeedback()
 {
   const float baseExtent  = std::max(m_frameConfig.swRasterThreshold, 1.0f);
   const float baseDensity = std::max(m_frameConfig.swRasterTriangleDensityThreshold, 0.01f);
-  const float baseScore   = glm::clamp(m_frameConfig.swRasterScoreThreshold, 0.05f, 0.95f);
 
   bool feedbackActive = m_renderer && m_rendererConfig.useComputeRaster && m_rendererConfig.useAdaptiveRasterRouting
                         && m_frameConfig.swRasterFeedbackEnabled;
@@ -314,7 +299,7 @@ void LodClusters::updateSwRasterFeedback()
   }
 
   if(!m_swRasterFeedback.initialized || m_swRasterFeedback.lastBaseExtent != baseExtent
-     || m_swRasterFeedback.lastBaseDensity != baseDensity || m_swRasterFeedback.lastBaseScore != baseScore)
+     || m_swRasterFeedback.lastBaseDensity != baseDensity)
   {
     resetSwRasterFeedback();
     m_swRasterFeedback.initialized = true;
@@ -330,7 +315,6 @@ void LodClusters::updateSwRasterFeedback()
   {
     m_frameConfig.swRasterThresholdEffective = m_swRasterFeedback.effectiveExtent;
     m_frameConfig.swRasterTriangleDensityThresholdEffective = m_swRasterFeedback.effectiveDensity;
-    m_frameConfig.swRasterScoreThresholdEffective = m_swRasterFeedback.effectiveScore;
     return;
   }
 
@@ -339,17 +323,6 @@ void LodClusters::updateSwRasterFeedback()
   const float swTriangleShare = float(readback.numRenderedTrianglesSW) / float(totalTriangles);
   const float swTrianglesPerCluster =
       readback.numRenderedClustersSW ? float(readback.numRenderedTrianglesSW) / float(readback.numRenderedClustersSW) : 0.0f;
-  const double routeArea = std::max(double(readback.routeProjectedAreaX256) / 256.0, 1.0);
-  const double swArea    = double(readback.routeProjectedAreaSWX256) / 256.0;
-  const float  swAreaShare = float(glm::clamp(swArea / routeArea, 0.0, 1.0));
-  const float  atomicAll = float((double(readback.routeAtomicPressureX256) / 256.0) / routeArea);
-  const float  atomicSW  = float((double(readback.routeAtomicPressureSWX256) / 256.0) / std::max(swArea, 1.0));
-  const float  depthAll  = float((double(readback.routeDepthRiskX256) / 256.0) / routeArea);
-  const float  depthSW   = float((double(readback.routeDepthRiskSWX256) / 256.0) / std::max(swArea, 1.0));
-  const float  scoreAll  = totalClusters ? float((double(readback.routeScoreX256) / 256.0) / double(totalClusters)) : 0.0f;
-  const float  scoreSW   = readback.numRenderedClustersSW ?
-                               float((double(readback.routeScoreSWX256) / 256.0) / double(readback.numRenderedClustersSW)) :
-                               0.0f;
 
   m_swRasterFeedback.emaSwClusterShare =
       m_swRasterFeedback.emaSwClusterShare * (1.0f - alpha) + swClusterShare * alpha;
@@ -357,20 +330,6 @@ void LodClusters::updateSwRasterFeedback()
       m_swRasterFeedback.emaSwTriangleShare * (1.0f - alpha) + swTriangleShare * alpha;
   m_swRasterFeedback.emaSwTrianglesPerCluster =
       m_swRasterFeedback.emaSwTrianglesPerCluster * (1.0f - alpha) + swTrianglesPerCluster * alpha;
-  m_swRasterFeedback.emaSwAreaShare =
-      m_swRasterFeedback.emaSwAreaShare * (1.0f - alpha) + swAreaShare * alpha;
-  m_swRasterFeedback.emaAtomicPressureAll =
-      m_swRasterFeedback.emaAtomicPressureAll * (1.0f - alpha) + atomicAll * alpha;
-  m_swRasterFeedback.emaAtomicPressureSW =
-      m_swRasterFeedback.emaAtomicPressureSW * (1.0f - alpha) + atomicSW * alpha;
-  m_swRasterFeedback.emaDepthRiskAll =
-      m_swRasterFeedback.emaDepthRiskAll * (1.0f - alpha) + depthAll * alpha;
-  m_swRasterFeedback.emaDepthRiskSW =
-      m_swRasterFeedback.emaDepthRiskSW * (1.0f - alpha) + depthSW * alpha;
-  m_swRasterFeedback.emaRouteScoreAll =
-      m_swRasterFeedback.emaRouteScoreAll * (1.0f - alpha) + scoreAll * alpha;
-  m_swRasterFeedback.emaRouteScoreSW =
-      m_swRasterFeedback.emaRouteScoreSW * (1.0f - alpha) + scoreSW * alpha;
 
   const bool enoughSamples = totalClusters >= 64;
   if(enoughSamples)
@@ -378,55 +337,41 @@ void LodClusters::updateSwRasterFeedback()
     const float targetTriangleShare = glm::clamp(m_frameConfig.swRasterFeedbackTargetTriangleShare, 0.02f, 0.75f);
     const float deadzone            = std::max(0.015f, targetTriangleShare * 0.15f);
     const float shareError          = m_swRasterFeedback.emaSwTriangleShare - targetTriangleShare;
-    const float areaError           = m_swRasterFeedback.emaSwAreaShare - targetTriangleShare * 0.85f;
-    const float combinedError       = shareError + std::max(areaError, 0.0f) * 0.25f;
-    const float stepExtent          = 0.28f;
-    const float stepDensity         = 0.035f;
-    const float proportional        = 0.18f;
-    const float integralGain        = 0.025f;
+    const float stepExtent          = 0.35f;
+    const float stepDensity         = 0.04f;
     const float highTrianglesPerCluster = std::min(float(m_sceneConfig.clusterTriangles) * 0.55f, 96.0f);
 
-    if(std::abs(combinedError) > deadzone)
+    float errorScale = 0.0f;
+    if(shareError > deadzone)
     {
-      m_swRasterFeedback.controllerIntegral =
-          glm::clamp(m_swRasterFeedback.controllerIntegral + combinedError, -1.5f, 1.5f);
-
-      const float controller = proportional * combinedError + integralGain * m_swRasterFeedback.controllerIntegral;
-      m_swRasterFeedback.effectiveScore += controller;
-      m_swRasterFeedback.effectiveExtent -= stepExtent * controller;
-      m_swRasterFeedback.effectiveDensity += stepDensity * controller;
+      errorScale = glm::clamp((shareError - deadzone) / std::max(1.0f - targetTriangleShare, 0.1f), 0.0f, 1.0f);
+      m_swRasterFeedback.effectiveExtent -= stepExtent * (0.35f + errorScale);
+      m_swRasterFeedback.effectiveDensity += stepDensity * (0.35f + errorScale);
+    }
+    else if(shareError < -deadzone)
+    {
+      errorScale = glm::clamp((-shareError - deadzone) / std::max(targetTriangleShare, 0.1f), 0.0f, 1.0f);
+      m_swRasterFeedback.effectiveExtent += stepExtent * (0.35f + errorScale);
+      m_swRasterFeedback.effectiveDensity -= stepDensity * (0.35f + errorScale);
     }
 
     if(m_swRasterFeedback.emaSwTrianglesPerCluster > highTrianglesPerCluster)
     {
       m_swRasterFeedback.effectiveExtent -= stepExtent * 0.5f;
       m_swRasterFeedback.effectiveDensity += stepDensity * 0.5f;
-      m_swRasterFeedback.effectiveScore += 0.03f;
-    }
-
-    const bool swHasHighAtomicCost = m_swRasterFeedback.emaAtomicPressureSW > std::max(1.35f * m_swRasterFeedback.emaAtomicPressureAll, 0.35f);
-    const bool swHasHighDepthRisk  = m_swRasterFeedback.emaDepthRiskSW > std::max(1.35f * m_swRasterFeedback.emaDepthRiskAll, 0.20f);
-    if(swHasHighAtomicCost || swHasHighDepthRisk)
-    {
-      m_swRasterFeedback.effectiveScore += 0.025f;
-      m_swRasterFeedback.effectiveDensity += stepDensity * 0.5f;
     }
   }
 
-  const float minExtent   = std::max(1.0f, baseExtent * 0.25f);
+  const float minExtent   = std::max(1.0f, baseExtent * 0.5f);
   const float maxExtent   = std::max(baseExtent * 2.0f, baseExtent + 4.0f);
   const float minDensity  = std::max(0.05f, baseDensity * 0.35f);
-  const float maxDensity  = std::max(baseDensity * 6.0f, baseDensity + 2.0f);
-  const float minScore    = std::max(0.05f, baseScore - 0.30f);
-  const float maxScore    = std::min(0.95f, std::max(baseScore + 0.35f, 0.90f));
+  const float maxDensity  = std::max(baseDensity * 3.0f, baseDensity + 0.75f);
 
   m_swRasterFeedback.effectiveExtent  = glm::clamp(m_swRasterFeedback.effectiveExtent, minExtent, maxExtent);
   m_swRasterFeedback.effectiveDensity = glm::clamp(m_swRasterFeedback.effectiveDensity, minDensity, maxDensity);
-  m_swRasterFeedback.effectiveScore   = glm::clamp(m_swRasterFeedback.effectiveScore, minScore, maxScore);
 
   m_frameConfig.swRasterThresholdEffective = m_swRasterFeedback.effectiveExtent;
   m_frameConfig.swRasterTriangleDensityThresholdEffective = m_swRasterFeedback.effectiveDensity;
-  m_frameConfig.swRasterScoreThresholdEffective = m_swRasterFeedback.effectiveScore;
 }
 
 void LodClusters::onPreRender()

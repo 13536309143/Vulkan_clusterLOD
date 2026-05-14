@@ -373,7 +373,6 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
   m_sceneBuildShaderio.frameIndex = m_frameIndex; // 帧号递增
   m_sceneBuildShaderio.swRasterThreshold = frame.swRasterThresholdEffective; // 切换到软光栅的屏幕尺寸阈值
   m_sceneBuildShaderio.swRasterTriangleDensityThreshold = frame.swRasterTriangleDensityThresholdEffective;
-  m_sceneBuildShaderio.swRasterScoreThreshold = frame.swRasterScoreThresholdEffective;
   // 将帧常量和 SceneBuilding 信息通过 vkCmdUpdateBuffer 拷贝到 GPU UBO/SSBO
   vkCmdUpdateBuffer(cmd, res.m_commonBuffers.frameConstants.buffer, 0, sizeof(shaderio::FrameConstants), (const uint32_t*)&frame.frameConstants);
   vkCmdUpdateBuffer(cmd, m_sceneBuildBuffer.buffer, 0, sizeof(shaderio::SceneBuilding), (const uint32_t*)&m_sceneBuildShaderio);

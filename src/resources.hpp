@@ -42,13 +42,10 @@ struct FrameConfig
   float swRasterThreshold = 8.0f;
   // if more triangles than this per projected pixel, prefer sw raster for tiny dense clusters
   float swRasterTriangleDensityThreshold = 0.5f;
-  // score threshold used by the runtime SW/HW raster performance model
-  float swRasterScoreThreshold = 0.35f;
   bool  swRasterFeedbackEnabled = false;
   float swRasterFeedbackTargetTriangleShare = 0.15f;
   float swRasterThresholdEffective = 8.0f;
   float swRasterTriangleDensityThresholdEffective = 0.5f;
-  float swRasterScoreThresholdEffective = 0.35f;
 
   // how many frames until we schedule a group for unloading
   uint32_t streamingAgeThreshold = 16;
