@@ -265,11 +265,21 @@ private:
     bool  initialized = false;
     float lastBaseExtent = 0.0f;
     float lastBaseDensity = 0.0f;
+    float lastBaseScore = 0.0f;
     float effectiveExtent = 0.0f;
     float effectiveDensity = 0.0f;
+    float effectiveScore = 0.0f;
     float emaSwClusterShare = 0.0f;
     float emaSwTriangleShare = 0.0f;
     float emaSwTrianglesPerCluster = 0.0f;
+    float emaSwAreaShare = 0.0f;
+    float emaAtomicPressureAll = 0.0f;
+    float emaAtomicPressureSW = 0.0f;
+    float emaDepthRiskAll = 0.0f;
+    float emaDepthRiskSW = 0.0f;
+    float emaRouteScoreAll = 0.0f;
+    float emaRouteScoreSW = 0.0f;
+    float controllerIntegral = 0.0f;
   } m_swRasterFeedback;
   // // 拾取相关
   // struct PickedInfo

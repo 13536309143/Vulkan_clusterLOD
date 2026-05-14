@@ -85,13 +85,31 @@ bool intersectSize(vec4 clipMin, vec4 clipMax, float threshold, float scale)
 }
 
 #if USE_SW_RASTER
+struct SwRouteMetrics
+{
+  uint areaX256;
+  uint atomicPressureX256;
+  uint depthRiskX256;
+  uint scoreX256;
+};
+
 vec2 projectedRectPixels(vec4 clipMin, vec4 clipMax)
 {
   return max((clipMax.xy - clipMin.xy) * 0.5 * view.viewportf.xy, vec2(0.0));
 }
 
-bool shouldUseSwRaster(BBox bbox, vec4 clipMin, vec4 clipMax, bool clipValid, uint triangleCount)
+uint metricToX256(float value, float maxValue)
 {
+  return uint(round(clamp(value, 0.0, maxValue) * 256.0));
+}
+
+bool shouldUseSwRaster(BBox bbox, vec4 clipMin, vec4 clipMax, bool clipValid, uint triangleCount, bool twoSided, out SwRouteMetrics metrics)
+{
+  metrics.areaX256 = 0u;
+  metrics.atomicPressureX256 = 0u;
+  metrics.depthRiskX256 = 0u;
+  metrics.scoreX256 = 0u;
+
   if(!(clipValid && clipMin.z > 0.0 && clipMax.z < 1.0))
   {
     return false;
@@ -104,25 +122,44 @@ bool shouldUseSwRaster(BBox bbox, vec4 clipMin, vec4 clipMax, bool clipValid, ui
   float triangleCountF      = max(float(triangleCount), 1.0);
   float triangleDensity     = triangleCountF / projectedAreaPx;
   float avgTrianglePixels   = projectedAreaPx / triangleCountF;
-  float avgTriangleExtentPx = projectedExtentPx / sqrt(triangleCountF);
+  float depthSpan           = max(clipMax.z - clipMin.z, 0.0);
 
   float extentThreshold     = max(build.swRasterThreshold, 1.0);
   float densityThreshold    = max(build.swRasterTriangleDensityThreshold, 1e-4);
-  float maxTrianglePixels   = 1.0 / densityThreshold;
-  float maxTriangleExtentPx = sqrt(maxTrianglePixels);
-  float maxClusterAreaPx    = max(extentThreshold * extentThreshold, 1.0);
+  float scoreThreshold      = clamp(build.swRasterScoreThreshold, 0.05, 0.95);
 
-  bool smallCluster   = projectedExtentPx <= extentThreshold && projectedAreaPx <= maxClusterAreaPx;
-  bool tinyTriangles  = triangleDensity >= densityThreshold
-                        && avgTrianglePixels <= maxTrianglePixels
-                        && avgTriangleExtentPx <= maxTriangleExtentPx;
-  bool enoughWork     = triangleCount >= 8u;
+  float smallClusterScore   = 1.0 - smoothstep(extentThreshold, extentThreshold * 2.0, projectedExtentPx);
+  float tinyTriangleScore   = smoothstep(densityThreshold * 0.5, densityThreshold * 2.0, triangleDensity);
+  float workScore           = smoothstep(4.0, 32.0, triangleCountF);
+  float meshShaderPressure  = smallClusterScore * smoothstep(16.0, 96.0, triangleCountF);
 
-  return smallCluster && tinyTriangles && enoughWork;
+  // Compute raster becomes expensive when large triangles cover many pixels,
+  // when many fragments contend for the same atomic target, or when two-sided
+  // material work increases the per-triangle path length.
+  float atomicConflictRisk  = clamp(avgTrianglePixels / 4.0, 0.0, 1.0) * clamp(triangleDensity / max(densityThreshold, 1e-4), 0.0, 2.0);
+  float depthComplexityRisk = clamp(log2(projectedAreaPx + 1.0) / 12.0, 0.0, 1.0) * clamp(depthSpan * 64.0, 0.0, 1.0);
+  float materialCostRisk    = twoSided ? 0.20 : 0.0;
+
+  float swBenefitScore = smallClusterScore * 0.35 + tinyTriangleScore * 0.35 + workScore * 0.20 + meshShaderPressure * 0.25;
+  float swCostScore    = atomicConflictRisk * 0.35 + depthComplexityRisk * 0.20 + materialCostRisk;
+  float routeScore     = swBenefitScore - swCostScore;
+
+  metrics.areaX256           = metricToX256(projectedAreaPx, 65535.0);
+  metrics.atomicPressureX256 = metricToX256(atomicConflictRisk * projectedAreaPx, 65535.0);
+  metrics.depthRiskX256      = metricToX256(depthComplexityRisk * projectedAreaPx, 65535.0);
+  metrics.scoreX256          = metricToX256(max(routeScore, 0.0), 4.0);
+
+  bool withinComputeEnvelope = projectedExtentPx <= extentThreshold * 2.0 && projectedAreaPx <= max(extentThreshold * extentThreshold * 4.0, 1.0);
+  bool enoughWork            = triangleCount >= 4u;
+
+  return withinComputeEnvelope && enoughWork && routeScore >= scoreThreshold;
 #else
   vec3  bboxDim      = bbox.hi - bbox.lo;
   float bboxDiagonal = max(length(bboxDim), 1e-6);
   float relativeSize = bbox.longestEdge / bboxDiagonal;
+  vec2  rectPixels   = projectedRectPixels(clipMin, clipMax);
+  float projectedAreaPx = max(rectPixels.x * rectPixels.y, 1.0);
+  metrics.areaX256 = metricToX256(projectedAreaPx, 65535.0);
 
   return !intersectSize(clipMin, clipMax, build.swRasterThreshold, relativeSize);
 #endif
@@ -241,13 +278,52 @@ void main()
 #else
     uint triangleCount = Cluster_in(geometry.preloadedClusters.d[clusterID]).d.triangleCountMinusOne + 1;
 #endif
-    bool renderClusterSW = renderCluster && shouldUseSwRaster(bbox, clipMin, clipMax, clipValid, triangleCount);
+    bool routeCandidate = renderCluster;
+    SwRouteMetrics swRouteMetrics;
+    bool renderClusterSW = renderCluster && shouldUseSwRaster(bbox, clipMin, clipMax, clipValid, triangleCount,
+                                                              instances[instanceID].twoSided != 0, swRouteMetrics);
     if(renderClusterSW)
     {
       renderCluster = false;
     }
 #elif TARGETS_RASTERIZATION && USE_SW_RASTER
+    bool routeCandidate = false;
+    SwRouteMetrics swRouteMetrics;
+    swRouteMetrics.areaX256 = 0u;
+    swRouteMetrics.atomicPressureX256 = 0u;
+    swRouteMetrics.depthRiskX256 = 0u;
+    swRouteMetrics.scoreX256 = 0u;
     bool renderClusterSW = false;
+#endif
+
+#if TARGETS_RASTERIZATION && USE_SW_RASTER && USE_RENDER_STATS
+    uint routeAreaMetric           = routeCandidate ? swRouteMetrics.areaX256 : 0u;
+    uint routeAreaMetricSW         = renderClusterSW ? swRouteMetrics.areaX256 : 0u;
+    uint routeAtomicMetric         = routeCandidate ? swRouteMetrics.atomicPressureX256 : 0u;
+    uint routeAtomicMetricSW       = renderClusterSW ? swRouteMetrics.atomicPressureX256 : 0u;
+    uint routeDepthMetric          = routeCandidate ? swRouteMetrics.depthRiskX256 : 0u;
+    uint routeDepthMetricSW        = renderClusterSW ? swRouteMetrics.depthRiskX256 : 0u;
+    uint routeScoreMetric          = routeCandidate ? swRouteMetrics.scoreX256 : 0u;
+    uint routeScoreMetricSW        = renderClusterSW ? swRouteMetrics.scoreX256 : 0u;
+    uint sumRouteArea              = subgroupAdd(routeAreaMetric);
+    uint sumRouteAreaSW            = subgroupAdd(routeAreaMetricSW);
+    uint sumRouteAtomic            = subgroupAdd(routeAtomicMetric);
+    uint sumRouteAtomicSW          = subgroupAdd(routeAtomicMetricSW);
+    uint sumRouteDepth             = subgroupAdd(routeDepthMetric);
+    uint sumRouteDepthSW           = subgroupAdd(routeDepthMetricSW);
+    uint sumRouteScore             = subgroupAdd(routeScoreMetric);
+    uint sumRouteScoreSW           = subgroupAdd(routeScoreMetricSW);
+    if(subgroupElect())
+    {
+      atomicAdd(readback.routeProjectedAreaX256, uint64_t(sumRouteArea));
+      atomicAdd(readback.routeProjectedAreaSWX256, uint64_t(sumRouteAreaSW));
+      atomicAdd(readback.routeAtomicPressureX256, uint64_t(sumRouteAtomic));
+      atomicAdd(readback.routeAtomicPressureSWX256, uint64_t(sumRouteAtomicSW));
+      atomicAdd(readback.routeDepthRiskX256, uint64_t(sumRouteDepth));
+      atomicAdd(readback.routeDepthRiskSWX256, uint64_t(sumRouteDepthSW));
+      atomicAdd(readback.routeScoreX256, uint64_t(sumRouteScore));
+      atomicAdd(readback.routeScoreSWX256, uint64_t(sumRouteScoreSW));
+    }
 #endif
 
 #if TARGETS_RASTERIZATION && USE_SW_RASTER

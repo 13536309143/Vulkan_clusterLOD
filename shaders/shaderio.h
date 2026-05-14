@@ -258,6 +258,15 @@ struct Readback
   uint64_t numRasteredTriangles;
   uint64_t numRasteredTrianglesSW;
 
+  uint64_t routeProjectedAreaX256;
+  uint64_t routeProjectedAreaSWX256;
+  uint64_t routeAtomicPressureX256;
+  uint64_t routeAtomicPressureSWX256;
+  uint64_t routeDepthRiskX256;
+  uint64_t routeDepthRiskSWX256;
+  uint64_t routeScoreX256;
+  uint64_t routeScoreSWX256;
+
 
 
 #ifdef __cplusplus
