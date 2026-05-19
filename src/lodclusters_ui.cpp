@@ -767,6 +767,17 @@ void LodClusters::onUIRender()
        PE::InputIntClamped("Max Transfer MiB", (int*)&m_streamingConfig.maxTransferMegaBytes, 1, 1024, 1, 2,
                            ImGuiInputTextFlags_EnterReturnsTrue);
 
+       PE::Checkbox("Budget priority scheduling", &m_streamingConfig.useBudgetAwareScheduling,
+                    "Prioritize streaming by visibility, error reduction, feature weight, reuse and load cost");
+       ImGui::BeginDisabled(!m_streamingConfig.useBudgetAwareScheduling);
+       PE::InputFloat("Budget low watermark", &m_streamingConfig.streamingBudgetLowWatermark, 0.01f, 0.05f, "%.2f",
+                      ImGuiInputTextFlags_EnterReturnsTrue);
+       PE::InputFloat("Budget high watermark", &m_streamingConfig.streamingBudgetHighWatermark, 0.01f, 0.05f, "%.2f",
+                      ImGuiInputTextFlags_EnterReturnsTrue);
+       PE::InputFloat("Camera motion boost", &m_streamingConfig.streamingCameraMotionBoost, 0.1f, 0.5f, "%.2f",
+                      ImGuiInputTextFlags_EnterReturnsTrue);
+       ImGui::EndDisabled();
+
        PE::Checkbox("Async transfer", &m_streamingConfig.useAsyncTransfer, "Use asynchronous transfer queue for uploads");
        ImGui::BeginDisabled(!m_streamingConfig.useAsyncTransfer);
        PE::Checkbox("Decoupled transfer", &m_streamingConfig.useDecoupledAsyncTransfer,
@@ -868,6 +879,33 @@ void LodClusters::onUIRender()
                           formatMetric(stats.uncompletedLoadCount).c_str());
        ImGui::TableNextColumn();
        ImGui::TextColored(stats.uncompletedLoadCount ? warn_color : text_color, "%d %%", pctUncompleted);
+       ImGui::TableNextRow();
+       ImGui::TableNextColumn();
+
+       ImGui::Text("Priority candidates");
+       ImGui::TableNextColumn();
+       ImGui::TextColored(text_color, "%s", formatMetric(stats.prioritizedLoadCount).c_str());
+       ImGui::TableNextColumn();
+       ImGui::TextColored(text_color, "%.2f avg", stats.avgAcceptedPriority);
+       ImGui::TableNextRow();
+       ImGui::TableNextColumn();
+
+       ImGui::Text("Budget deferred");
+       ImGui::TableNextColumn();
+       ImGui::TextColored(stats.budgetDeferredCount ? warn_color : text_color, "%s",
+                          formatMetric(stats.budgetDeferredCount).c_str());
+       ImGui::TableNextColumn();
+       ImGui::TextColored(stats.deferredLoadCount ? warn_color : text_color, "%s def",
+                          formatMetric(stats.deferredLoadCount).c_str());
+       ImGui::TableNextRow();
+       ImGui::TableNextColumn();
+
+       ImGui::Text("Budget pressure");
+       ImGui::TableNextColumn();
+       ImGui::TextColored(stats.budgetPressure > m_streamingConfig.streamingBudgetHighWatermark ? warn_color : text_color,
+                          "%.3f", stats.budgetPressure);
+       ImGui::TableNextColumn();
+       ImGui::TextColored(text_color, "age %u", stats.dynamicAgeThreshold);
        ImGui::TableNextRow();
        ImGui::TableNextColumn();
 

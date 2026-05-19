@@ -18,6 +18,7 @@ public:
   struct FrameSettings
   {
     uint32_t ageThreshold = 16;
+    float    cameraMotion = 0.0f;
   };
   void cmdBeginFrame(VkCommandBuffer         cmd,
                      QueueState&             cmdQueueState,

@@ -51,6 +51,7 @@ struct StreamingRequest
   int  errorClasUsedVsAlloc;
 
   BUFFER_REF(uvec2s_inout) loadGeometryGroups;
+  BUFFER_REF(uint32s_inout) loadPriorities;
   BUFFER_REF(uvec2s_inout) unloadGeometryGroups;
 };
 

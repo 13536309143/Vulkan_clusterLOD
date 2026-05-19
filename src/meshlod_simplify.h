@@ -26,6 +26,12 @@ inline float clamp01(float v)
 	return std::max(0.f, std::min(1.f, v));
 }
 
+inline void protectVertex(std::vector<unsigned char>& locks, unsigned int vertex)
+{
+	if(vertex < locks.size())
+		locks[vertex] |= meshopt_SimplifyVertex_Protect;
+}
+
 inline float dot3(const float* a, const float* b)
 {
 	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -40,6 +46,98 @@ inline float distance3(const float* a, const float* b)
 {
 	float d[3] = {a[0] - b[0], a[1] - b[1], a[2] - b[2]};
 	return length3(d);
+}
+
+inline void protectIndustrialFeatureVertices(const clodConfig& config,
+                                             const clodMesh&   mesh,
+                                             const std::vector<unsigned int>& indices,
+                                             std::vector<unsigned char>& locks)
+{
+	if(!config.industrial_feature_preservation || indices.size() < 3)
+		return;
+
+	const size_t positions_stride = mesh.vertex_positions_stride / sizeof(float);
+	const size_t triangle_count   = indices.size() / 3;
+
+	std::vector<FaceInfo> faces(triangle_count);
+	std::vector<EdgeUse>  edges;
+	edges.reserve(triangle_count * 3);
+
+	for(size_t t = 0; t < triangle_count; ++t)
+	{
+		const unsigned int ia = indices[t * 3 + 0];
+		const unsigned int ib = indices[t * 3 + 1];
+		const unsigned int ic = indices[t * 3 + 2];
+
+		const float* a = &mesh.vertex_positions[ia * positions_stride];
+		const float* b = &mesh.vertex_positions[ib * positions_stride];
+		const float* c = &mesh.vertex_positions[ic * positions_stride];
+
+		float ab[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+		float ac[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+		float n[3]  = {ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2],
+                     ab[0] * ac[1] - ab[1] * ac[0]};
+		float nlen = length3(n);
+		if(nlen > 1e-12f)
+		{
+			faces[t].normal[0] = n[0] / nlen;
+			faces[t].normal[1] = n[1] / nlen;
+			faces[t].normal[2] = n[2] / nlen;
+		}
+
+		const float eab = distance3(a, b);
+		const float ebc = distance3(b, c);
+		const float eca = distance3(c, a);
+		faces[t].min_edge = std::min(eab, std::min(ebc, eca));
+		faces[t].max_edge = std::max(eab, std::max(ebc, eca));
+
+		if(faces[t].max_edge > 1e-12f && faces[t].min_edge / faces[t].max_edge < 0.08f)
+		{
+			protectVertex(locks, ia);
+			protectVertex(locks, ib);
+			protectVertex(locks, ic);
+		}
+
+		unsigned int tri[3] = {ia, ib, ic};
+		for(int e = 0; e < 3; ++e)
+		{
+			unsigned int x = tri[e];
+			unsigned int y = tri[(e + 1) % 3];
+			if(x > y)
+				std::swap(x, y);
+			edges.push_back({x, y, unsigned(t)});
+		}
+	}
+
+	std::sort(edges.begin(), edges.end(), [](const EdgeUse& lhs, const EdgeUse& rhs) {
+		return lhs.a == rhs.a ? lhs.b < rhs.b : lhs.a < rhs.a;
+	});
+
+	const float sharp_dot_threshold = clamp01(config.feature_edge_threshold > 0.f ? config.feature_edge_threshold : 0.5f);
+	for(size_t i = 0; i < edges.size();)
+	{
+		size_t j = i + 1;
+		while(j < edges.size() && edges[j].a == edges[i].a && edges[j].b == edges[i].b)
+			j++;
+
+		const size_t uses = j - i;
+		bool protect = uses != 2;
+		if(!protect)
+		{
+			const FaceInfo& f0 = faces[edges[i].face];
+			const FaceInfo& f1 = faces[edges[i + 1].face];
+			const float normal_dot = fabsf(dot3(f0.normal, f1.normal));
+			protect = normal_dot < sharp_dot_threshold;
+		}
+
+		if(protect)
+		{
+			protectVertex(locks, edges[i].a);
+			protectVertex(locks, edges[i].b);
+		}
+
+		i = j;
+	}
 }
 
 }  // namespace detail
@@ -238,6 +336,15 @@ std::vector<unsigned int> simplify(const clodConfig& config,
 	size_t positions_stride = mesh.vertex_positions_stride / sizeof(float);
 
 	const IndustrialFeatureStats feature_stats = computeIndustrialFeatureStats(config, mesh, indices);
+	std::vector<unsigned char> feature_locks;
+	const unsigned char* effective_locks = locks.data();
+	if(config.industrial_feature_preservation && feature_stats.importance > 0.f)
+	{
+		feature_locks = locks;
+		detail::protectIndustrialFeatureVertices(config, mesh, indices, feature_locks);
+		effective_locks = feature_locks.data();
+	}
+
 	float effective_ratio = config.simplify_ratio;
 	if(config.industrial_feature_preservation && feature_stats.importance > 0.f)
 	{
@@ -257,19 +364,19 @@ std::vector<unsigned int> simplify(const clodConfig& config,
 	lod.resize(meshopt_simplifyWithAttributes(&lod[0], &indices[0], indices.size(),
 		mesh.vertex_positions, mesh.vertex_count, mesh.vertex_positions_stride,
 		mesh.vertex_attributes, mesh.vertex_attributes_stride, mesh.attribute_weights, mesh.attribute_count,
-		locks.data(), adaptive_target, FLT_MAX, options, error));
+		effective_locks, adaptive_target, FLT_MAX, options, error));
 
 	if(lod.size() > adaptive_target && config.simplify_fallback_permissive && !config.simplify_permissive)
 	{
 		lod.resize(meshopt_simplifyWithAttributes(&lod[0], &indices[0], indices.size(),
 			mesh.vertex_positions, mesh.vertex_count, mesh.vertex_positions_stride,
 			mesh.vertex_attributes, mesh.vertex_attributes_stride, mesh.attribute_weights, mesh.attribute_count,
-			locks.data(), adaptive_target, FLT_MAX, options | meshopt_SimplifyPermissive, error));
+			effective_locks, adaptive_target, FLT_MAX, options | meshopt_SimplifyPermissive, error));
 	}
 
 	if(lod.size() > adaptive_target && config.simplify_fallback_sloppy)
 	{
-		simplifyFallback(lod, mesh, indices, locks, adaptive_target, error);
+		simplifyFallback(lod, mesh, indices, feature_locks.empty() ? locks : feature_locks, adaptive_target, error);
 		*error *= config.simplify_error_factor_sloppy;
 	}
 

@@ -18,6 +18,7 @@ struct StreamingConfig
   bool allowBlasCaching           = true;
   bool useAsyncTransfer           = false;
   bool useDecoupledAsyncTransfer  = false;
+  bool useBudgetAwareScheduling   = true;
 
   uint32_t maxPerFrameLoadRequests   = 128;
   uint32_t maxPerFrameUnloadRequests = 1024;
@@ -37,6 +38,10 @@ struct StreamingConfig
   uint32_t clasAllocatorSectorSizeShift = 10;
   // granularity of allocator in multiples of clas alignment
   uint32_t clasAllocatorGranularityShift = 0;
+
+  float streamingBudgetLowWatermark  = 0.72f;
+  float streamingBudgetHighWatermark = 0.92f;
+  float streamingCameraMotionBoost   = 1.5f;
 };
 
 struct StreamingStats
@@ -74,6 +79,16 @@ struct StreamingStats
   uint32_t couldNotAllocateClas  = 0;
   uint32_t couldNotTransfer      = 0;
   uint32_t couldNotStore         = 0;
+
+  uint32_t prioritizedLoadCount = 0;
+  uint32_t deferredLoadCount    = 0;
+  uint32_t duplicateLoadCount   = 0;
+  uint32_t budgetDeferredCount  = 0;
+  uint32_t dynamicAgeThreshold  = 0;
+  float    budgetPressure       = 0.0f;
+  float    cameraMotion         = 0.0f;
+  float    minAcceptedPriority  = 0.0f;
+  float    avgAcceptedPriority  = 0.0f;
 };
 
 union GeometryGroup
@@ -92,6 +107,7 @@ public:
   {
     const shaderio::StreamingRequest* shaderData;
     const GeometryGroup*              loadGeometryGroups;
+    const uint32_t*                    loadPriorities;
     const GeometryGroup*              unloadGeometryGroups;
   };
 
