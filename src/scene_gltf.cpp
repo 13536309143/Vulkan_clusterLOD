@@ -1,5 +1,8 @@
 //锟斤拷锟斤拷锟斤拷图锟斤拷锟
 #include <float.h>
+#include <cinttypes>
+#include <exception>
+#include <new>
 #include <unordered_map>
 #include <string>
 #include <fmt/format.h>
@@ -231,8 +234,7 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
     return SCENE_RESULT_ERROR;
   }
 
-  // if we are loading from a cache file, we don't need any of the raw buffers
-  if(!m_cacheFileView.isValid())
+  // Load all source buffers and build cluster LOD data directly.
   {
     // For now, also tell cgltf to go ahead and load all buffers.
     cgltfResult = cgltf_load_buffers(&options, gltf.get(), fileName.c_str());
@@ -340,8 +342,7 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
         meshToGeometry[meshIndex] = pair.first->second;
       }
     }
-    if(!m_cacheFileView.isValid() && !m_loaderConfig.processingOnly
-       && (geometryMemoryEstimate > size_t(m_loaderConfig.forcePreprocessMiB) * 1024 * 1024))
+    if(geometryMemoryEstimate > size_t(m_loaderConfig.forcePreprocessMiB) * 1024 * 1024)
     {
       return SCENE_RESULT_NEEDS_PREPROCESS;
     }
@@ -350,12 +351,17 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
   m_geometryStorages.resize(geometryToMesh.size());
   m_geometryViews.resize(geometryToMesh.size());
 
+  constexpr size_t maxSimplifiedSceneGeometries = 8192;
+  if(geometryToMesh.size() > maxSimplifiedSceneGeometries)
+  {
+    LOGE("Scene has %zu unique geometries; simplified build supports up to %zu without streaming/cache. Use a smaller scene.\n",
+         geometryToMesh.size(), maxSimplifiedSceneGeometries);
+    return SCENE_RESULT_ERROR;
+  }
+
   beginProcessingOnly(geometryToMesh.size());
 
-  if(!m_cacheFileView.isValid())
-  {
-    processingInfo.setupCompressedGltf(gltf->buffer_views_count);
-  }
+  processingInfo.setupCompressedGltf(gltf->buffer_views_count);
   processingInfo.setupParallelism(geometryToMesh.size(), m_processingOnlyPartialCompleted, m_loaderConfig.processingMode);
 
   if(processingInfo.numOuterThreads > processingInfo.numInnerThreads)
@@ -369,7 +375,22 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
     // map back from unique geometry to gltf mesh
     size_t meshIndex = geometryToMesh[geometryIndex];
 
-    loadGeometryGLTF(processingInfo, geometryIndex, meshIndex, gltf.get());
+    try
+    {
+      loadGeometryGLTF(processingInfo, geometryIndex, meshIndex, gltf.get());
+    }
+    catch(const std::bad_alloc&)
+    {
+      LOGE("Out of memory while processing geometry %" PRIu64 "\n", geometryIndex);
+    }
+    catch(const std::exception& e)
+    {
+      LOGE("Exception while processing geometry %" PRIu64 ": %s\n", geometryIndex, e.what());
+    }
+    catch(...)
+    {
+      LOGE("Unknown exception while processing geometry %" PRIu64 "\n", geometryIndex);
+    }
   };
   processingInfo.logBegin(m_processingOnlyPartialFile ? 0 : totalTriangleCount);
   if(m_loaderConfig.progressPct)
@@ -377,7 +398,17 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
     m_loaderConfig.progressPct->store(0);
   }
 
-  nvutils::parallel_batches_pooled<1>(geometryToMesh.size(), fnLoadAndProcessGeometry, processingInfo.numOuterThreads);
+  if(processingInfo.numOuterThreads <= 1)
+  {
+    for(uint64_t taskIndex = 0; taskIndex < geometryToMesh.size(); taskIndex++)
+    {
+      fnLoadAndProcessGeometry(taskIndex, 0);
+    }
+  }
+  else
+  {
+    nvutils::parallel_batches_pooled<1>(geometryToMesh.size(), fnLoadAndProcessGeometry, processingInfo.numOuterThreads);
+  }
 
   processingInfo.logEnd();
   if(m_loaderConfig.progressPct)
@@ -402,7 +433,7 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
 
   if(notCompleted)
   {
-    return m_cacheFileView.isValid() ? SCENE_RESULT_CACHE_INVALID : SCENE_RESULT_ERROR;
+    return SCENE_RESULT_ERROR;
   }
 
   if(gltf->scenes_count > 0)
@@ -761,38 +792,27 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
   geometry.lodInfo.inputTriangleCount = triangleCount;
   geometry.lodInfo.inputVertexCount   = verticesCount;
 
-  // test if this mesh exists in the cache
-  bool isCached = checkCache(geometry.lodInfo, geometryIndex);
-
-  // invalid cache
-  if(m_cacheFileView.isValid() && !isCached)
+  if(!(geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_NORMAL))
   {
-    LOGW("geometry mismatches scene cache file\n");
-    return;
+    geometry.attributeBits &= ~shaderio::CLUSTER_ATTRIBUTE_VERTEX_TANGENT;
   }
-  if(!isCached)
+  if(!(geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_0))
   {
-    if(!(geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_NORMAL))
-    {
-      geometry.attributeBits &= ~shaderio::CLUSTER_ATTRIBUTE_VERTEX_TANGENT;
-    }
-    if(!(geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_0))
-    {
-      geometry.attributeBits &= ~shaderio::CLUSTER_ATTRIBUTE_VERTEX_TANGENT;
-    }
+    geometry.attributeBits &= ~shaderio::CLUSTER_ATTRIBUTE_VERTEX_TANGENT;
+  }
 
-    // disable TEX_1 if no TEX_0
-    if(!(geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_0))
-    {
-      geometry.attributeBits &= ~shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_1;
-    }
+  // disable TEX_1 if no TEX_0
+  if(!(geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_0))
+  {
+    geometry.attributeBits &= ~shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_1;
+  }
 
-    size_t attributeStride = (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_NORMAL ? 3 : 0)
-                             + (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TANGENT ? 4 : 0)
-                             + (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_0 ? 2 : 0)
-                             + (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_1 ? 2 : 0);
-    uint32_t attributeStart = 0;
-    uint32_t attributeEnd   = uint32_t(attributeStride);
+  size_t attributeStride = (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_NORMAL ? 3 : 0)
+                           + (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TANGENT ? 4 : 0)
+                           + (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_0 ? 2 : 0)
+                           + (geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_TEX_1 ? 2 : 0);
+  uint32_t attributeStart = 0;
+  uint32_t attributeEnd   = uint32_t(attributeStride);
 
     // all attributes with simplification weights must come first due to how
     // meshoptimizer works
@@ -967,9 +987,7 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
 
       offsetVertices += numVertices;
     }
-  }
-
-  processGeometry(processingInfo, geometryIndex, isCached);
+  processGeometry(processingInfo, geometryIndex);
 
   if(!compressedViews.empty())
   {

@@ -1,32 +1,77 @@
 //直接加载
+#include <limits>
+
 #include <volk.h>
 #include "preloaded.hpp"
 
 namespace lodclusters {
 
-bool ScenePreloaded::canPreload(VkDeviceSize deviceLocalHeapSize, const Scene* scene)
+namespace {
+
+bool addSize(VkDeviceSize& total, VkDeviceSize value)
 {
-  VkDeviceSize sizeLimit = (deviceLocalHeapSize * 600) / 1000;
-  VkDeviceSize testSize  = 0;
+  if(value > std::numeric_limits<VkDeviceSize>::max() - total)
+  {
+    return false;
+  }
+
+  total += value;
+  return true;
+}
+
+bool estimatePreloadSize(VkDeviceSize& estimatedSize, const Scene* scene)
+{
+  estimatedSize = 0;
 
   for(size_t geometryIndex = 0; geometryIndex < scene->getActiveGeometryCount(); geometryIndex++)
   {
     const Scene::GeometryView& sceneGeometry = scene->getActiveGeometry(geometryIndex);
-    ScenePreloaded::Geometry   preloadGeometry;
-    size_t numNodes = sceneGeometry.lodNodes.size();
-    testSize += preloadGeometry.lodNodes.value_size * numNodes;
-    testSize += preloadGeometry.lodNodeBboxes.value_size * numNodes;
+    VkDeviceSize groupDataSize = sceneGeometry.groupData.size_bytes();
+    if(scene->m_config.useCompressedData)
+    {
+      groupDataSize = 0;
+      for(size_t g = 0; g < sceneGeometry.groupInfos.size(); g++)
+      {
+        if(!addSize(groupDataSize, sceneGeometry.groupInfos[g].getDeviceSize()))
+          return false;
+      }
+    }
 
-    uint32_t numLodLevels = sceneGeometry.lodLevelsCount;
-    testSize += preloadGeometry.lodLevels.value_size * numLodLevels;
+    const uint32_t numLodLevels = sceneGeometry.lodLevelsCount;
+    const size_t   numNodes     = sceneGeometry.lodNodes.size();
+
+    if(!addSize(estimatedSize, groupDataSize))
+      return false;
+    if(!addSize(estimatedSize, nvvk::BufferTyped<uint64_t>::value_size * sceneGeometry.groupInfos.size()))
+      return false;
+    if(!addSize(estimatedSize, nvvk::BufferTyped<uint64_t>::value_size * sceneGeometry.totalClustersCount))
+      return false;
+    if(!addSize(estimatedSize, nvvk::BufferTyped<shaderio::Node>::value_size * numNodes))
+      return false;
+    if(!addSize(estimatedSize, nvvk::BufferTyped<shaderio::BBox>::value_size * numNodes))
+      return false;
+    if(!addSize(estimatedSize, nvvk::BufferTyped<shaderio::LodLevel>::value_size * numLodLevels))
+      return false;
   }
 
-  if(testSize > sizeLimit)
+  return addSize(estimatedSize, nvvk::BufferTyped<shaderio::Geometry>::value_size * scene->getActiveGeometryCount());
+}
+
+}  // namespace
+
+bool ScenePreloaded::canPreload(VkDeviceSize deviceLocalHeapSize, const Scene* scene)
+{
+  const VkDeviceSize sizeLimit = (deviceLocalHeapSize * 600) / 1000;
+  VkDeviceSize       testSize  = 0;
+
+  if(!estimatePreloadSize(testSize, scene) || testSize > sizeLimit)
   {
-    LOGI("Likely exceeding device memory limit for preloaded scene\n");
+    LOGW("Preloaded scene too large: estimate %s, limit %s\n", formatMemorySize(testSize).c_str(),
+         formatMemorySize(sizeLimit).c_str());
     return false;
   }
 
+  LOGI("Preloaded scene memory estimate: %s / %s\n", formatMemorySize(testSize).c_str(), formatMemorySize(sizeLimit).c_str());
   return true;
 }
 
@@ -49,6 +94,11 @@ bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& conf
   m_geometries.resize(scene->getActiveGeometryCount());
 
   Resources::BatchedUploader uploader(*res);
+  auto fail = [this](const char* what) {
+    LOGE("Failed to allocate preloaded scene buffer: %s\n", what);
+    deinit();
+    return false;
+  };
 
   uint32_t instancesOffset = 0;
   for(size_t geometryIndex = 0; geometryIndex < scene->getActiveGeometryCount(); geometryIndex++)
@@ -69,23 +119,52 @@ bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& conf
       }
     }
 
-    res->createBuffer(preloadGeometry.groupData, groupDataSize,
-                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+    if(res->createBuffer(preloadGeometry.groupData, groupDataSize,
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+       != VK_SUCCESS)
+    {
+      return fail("groupData");
+    }
     NVVK_DBG_NAME(preloadGeometry.groupData.buffer);
 
-    res->createBufferTyped(preloadGeometry.groupAddresses, sceneGeometry.groupInfos.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    res->createBufferTyped(preloadGeometry.clusterAddresses, sceneGeometry.totalClustersCount, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    if(res->createBufferTyped(preloadGeometry.groupAddresses, sceneGeometry.groupInfos.size(),
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+       != VK_SUCCESS)
+    {
+      return fail("groupAddresses");
+    }
+    if(res->createBufferTyped(preloadGeometry.clusterAddresses, sceneGeometry.totalClustersCount,
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+       != VK_SUCCESS)
+    {
+      return fail("clusterAddresses");
+    }
     NVVK_DBG_NAME(preloadGeometry.groupAddresses.buffer);
     NVVK_DBG_NAME(preloadGeometry.clusterAddresses.buffer);
 
     size_t numNodes = sceneGeometry.lodNodes.size();
-    res->createBufferTyped(preloadGeometry.lodNodes, numNodes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    res->createBufferTyped(preloadGeometry.lodNodeBboxes, numNodes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    if(res->createBufferTyped(preloadGeometry.lodNodes, numNodes,
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+       != VK_SUCCESS)
+    {
+      return fail("lodNodes");
+    }
+    if(res->createBufferTyped(preloadGeometry.lodNodeBboxes, numNodes,
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+       != VK_SUCCESS)
+    {
+      return fail("lodNodeBboxes");
+    }
     NVVK_DBG_NAME(preloadGeometry.lodNodes.buffer);
     NVVK_DBG_NAME(preloadGeometry.lodNodeBboxes.buffer);
 
     uint32_t numLodLevels = sceneGeometry.lodLevelsCount;
-    res->createBufferTyped(preloadGeometry.lodLevels, numLodLevels, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    if(res->createBufferTyped(preloadGeometry.lodLevels, numLodLevels,
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+       != VK_SUCCESS)
+    {
+      return fail("lodLevels");
+    }
     NVVK_DBG_NAME(preloadGeometry.lodLevels.buffer);
 
     m_geometrySize += preloadGeometry.groupData.bufferSize;
@@ -153,7 +232,12 @@ bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& conf
     }
   }
 
-  res->createBufferTyped(m_shaderGeometriesBuffer, scene->getActiveGeometryCount(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+  if(res->createBufferTyped(m_shaderGeometriesBuffer, scene->getActiveGeometryCount(),
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)
+     != VK_SUCCESS)
+  {
+    return fail("shaderGeometries");
+  }
   NVVK_DBG_NAME(m_shaderGeometriesBuffer.buffer);
   m_operationsSize += logMemoryUsage(m_shaderGeometriesBuffer.bufferSize, "operations", "preloaded geo buffer");
 
@@ -181,8 +265,9 @@ void ScenePreloaded::deinit()
   }
 
   m_resources->m_allocator.destroyBuffer(m_shaderGeometriesBuffer);
-  m_resources    = nullptr;
-  m_scene        = nullptr;
-  m_geometrySize = 0;
+  m_resources      = nullptr;
+  m_scene          = nullptr;
+  m_geometrySize   = 0;
+  m_operationsSize = 0;
 }
 }  // namespace lodclusters

@@ -97,7 +97,7 @@ void Scene::ProcessingInfo::logEnd()
 
   LOGI("... geometry load & processing: %f milliseconds\n", (endTime - startTime) / 1000.0f);
 
-  // can be zero if loaded from cache
+  // can be zero if generated on demand
   if(stats.groups)
   {
     LOGI("Group Data Stats\n");
@@ -157,62 +157,23 @@ void Scene::fillGroupRuntimeData(const GroupInfo& srcGroupInfo,
 
 Scene::Result Scene::init(const std::filesystem::path& filePath,
                           const SceneConfig&           config,
-                          const SceneLoaderConfig&     loaderConfig,
-                          const std::string&           cacheSuffix,
-                          bool                         skipCache)
+                          const SceneLoaderConfig&     loaderConfig)
 {
   *this = {};
 
   m_filePath             = filePath;
   m_config               = config;
   m_loaderConfig         = loaderConfig;
-  m_loadedFromCache      = false;
-  m_cacheFilePath        = filePath;
-  m_cachePartialFilePath = filePath;
-  m_cacheFileSize        = 0;
-  m_cacheSuffix          = cacheSuffix;
-
-  std::string oldExtension = filePath.extension().string();
-  m_cacheFilePath.replace_extension(oldExtension + cacheSuffix);
-  m_cachePartialFilePath.replace_extension(oldExtension + cacheSuffix + "_partial");
-
-  if(!skipCache && !m_loaderConfig.processingOnly && m_loaderConfig.autoLoadCache)
-  {
-    openCache();
-  }
 
   ProcessingInfo processingInfo;
   processingInfo.init(m_loaderConfig.processingThreadsPct);
 
   Result loadResult = loadGLTF(processingInfo, filePath);
-  if(loadResult == SCENE_RESULT_NEEDS_PREPROCESS || loadResult == SCENE_RESULT_CACHE_INVALID)
-  {
-    LOGI("Scene::init large scene or invalid cache detected\n  using dedicated preprocess pass\n");
-    closeCache();
-
-    m_loaderConfig.processingOnly = true;
-    loadResult                    = loadGLTF(processingInfo, filePath);
-    m_loaderConfig.processingOnly = false;
-    if(loadResult == SCENE_RESULT_PREPROCESS_COMPLETED)
-    {
-      openCache();
-      loadResult = loadGLTF(processingInfo, filePath);
-    }
-  }
-
   processingInfo.deinit();
 
   if(loadResult != SCENE_RESULT_SUCCESS)
   {
-    closeCache();
-
     return loadResult;
-  }
-
-  if(m_loadedFromCache)
-  {
-    m_cacheFileView.getSceneConfig(m_config);
-    m_cacheFileView.getHistograms(m_histograms);
   }
 
   m_originalInstanceCount = m_instances.size();
@@ -260,18 +221,6 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
   LOGI("hi triangles: %" PRIu64 "\n", m_hiTrianglesCount);
   LOGI("hi vertices: %" PRIu64 "\n", m_hiVerticesCount);
   LOGI("hi triangles/cluster: %.2f\n", double(m_hiTrianglesCount) / double(m_hiClustersCount));
-
-  if(!m_loadedFromCache && m_loaderConfig.autoSaveCache)
-  {
-    saveCache();
-  }
-
-  if(m_loadedFromCache && !m_loaderConfig.memoryMappedCache)
-  {
-    // everything was loaded into system memory,
-    // close file mappings
-    closeCache();
-  }
 
   return loadResult;
 }
@@ -495,65 +444,38 @@ void Scene::computeInstanceBBoxes()
   }
 }
 
-void Scene::processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex, bool isCached)
+void Scene::processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex)
 {
   GeometryStorage& geometryStorage = m_geometryStorages[geometryIndex];
   GeometryView&    geometryView    = m_geometryViews[geometryIndex];
 
-  bool viewFromStorage = true;
-
-  if(isCached)
+  if(geometryStorage.triangles.empty())
   {
-    if(m_loaderConfig.memoryMappedCache)
-    {
-      m_cacheFileView.getGeometryView(geometryView, geometryIndex);
-
-      viewFromStorage = false;
-    }
-    else
-    {
-      loadCachedGeometry(geometryStorage, geometryIndex);
-    }
+    geometryStorage = {};
   }
   else
   {
-    if(geometryStorage.triangles.empty())
+    geometryStorage.lodInfo.inputTriangleCount       = geometryStorage.triangles.size();
+    geometryStorage.lodInfo.inputVertexCount         = geometryStorage.vertexPositions.size();
+    geometryStorage.lodInfo.inputTriangleIndicesHash = 0;
+    geometryStorage.lodInfo.inputVerticesHash        = 0;
+
+    if(geometryStorage.vertexPositions.size() >= (geometryStorage.triangles.size() + geometryStorage.triangles.size() / 2))
     {
-      geometryStorage = {};
+      buildGeometryDedupVertices(processingInfo, geometryStorage);
     }
-    else
-    {
-      // for cache file
-      // The dedup might change the vertex count of the mesh, but for the cache file
-      // comparison we actually want to use the original vertex count
-      geometryStorage.lodInfo.inputTriangleCount       = geometryStorage.triangles.size();
-      geometryStorage.lodInfo.inputVertexCount         = geometryStorage.vertexPositions.size();
-      geometryStorage.lodInfo.inputTriangleIndicesHash = 0;
-      geometryStorage.lodInfo.inputVerticesHash        = 0;
 
-      size_t originalVertexCount = geometryStorage.vertexPositions.size();
-
-      // some exports give us independent triangles, clean those up
-      if(geometryStorage.vertexPositions.size() >= (geometryStorage.triangles.size() + geometryStorage.triangles.size() / 2))
-      {
-        buildGeometryDedupVertices(processingInfo, geometryStorage);
-      }
-
-      buildGeometryLod(processingInfo, geometryStorage);
-    }
+    buildGeometryLod(processingInfo, geometryStorage);
   }
 
-  if(viewFromStorage)
-  {
-    (GeometryBase&)geometryView = geometryStorage;
+  (GeometryBase&)geometryView = geometryStorage;
 
-    geometryView.groupData        = geometryStorage.groupData;
-    geometryView.groupInfos       = geometryStorage.groupInfos;
-    geometryView.lodLevels        = geometryStorage.lodLevels;
-    geometryView.lodNodes         = geometryStorage.lodNodes;
-    geometryView.lodNodeBboxes    = geometryStorage.lodNodeBboxes;
-    geometryView.localMaterialIDs = geometryStorage.localMaterialIDs;
-  }
+  geometryView.groupData        = geometryStorage.groupData;
+  geometryView.groupInfos       = geometryStorage.groupInfos;
+  geometryView.lodLevels        = geometryStorage.lodLevels;
+  geometryView.lodNodes         = geometryStorage.lodNodes;
+  geometryView.lodNodeBboxes    = geometryStorage.lodNodeBboxes;
+  geometryView.localMaterialIDs = geometryStorage.localMaterialIDs;
 
   // always reset
   geometryView.instanceReferenceCount = 0;
@@ -709,4 +631,14 @@ void Scene::computeHistogramMaxs()
     m_histograms.lodLevelsMax = std::max(m_histograms.lodLevelsMax, m_histograms.lodLevels[i]);
   }
 }
+
+void Scene::beginProcessingOnly(size_t) {}
+
+void Scene::saveProcessingOnly(ProcessingInfo&, size_t) {}
+
+bool Scene::endProcessingOnly(bool)
+{
+  return false;
+}
+
 }

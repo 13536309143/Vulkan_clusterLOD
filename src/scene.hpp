@@ -1,16 +1,20 @@
 #pragma once
 #include <vector>
 #include <array>
+#include <cassert>
+#include <cstdio>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <string>
 #include <atomic>
 #include <mutex>
+#include <span>
 #include <unordered_set>
 #include <functional>
 #include <glm/glm.hpp>
-#include <nvutils/file_mapping.hpp>
 #include <nvutils/timers.hpp>
 #include <nvutils/alignment.hpp>
-#include "serialization.hpp"
 #include "meshlod.h"
 #include "../shaders/shaderio_scene.h"
 
@@ -73,8 +77,7 @@ struct SceneConfig
   // experimental meshoptimizer, try to remove small triangles despite high error
   float lodErrorEdgeLimit = 0;
 
-  // want to allow some binary compatibility with older cache files
-  // safe to add new variables into this section as long as they are zeroed by default
+  // reserved for binary-compatible config growth
   ////////////////////////////////////////////////
   // 开启lod优化
   uint32_t reservedData[9] = {};
@@ -89,25 +92,10 @@ struct SceneLoaderConfig
   // Influence the number of geometries that can be processed in parallel.
   // Percentage of threads of maximum hardware concurrency
   float processingThreadsPct = 0.5;
-  // We only process the data and save a cache file, then
-  // terminate the app. This allows to greatly reduce peak memory
-  // consumption during processing.
-  bool processingOnly = false;
-  // in processing only mode we allow partial success / resuming
-  bool processingAllowPartial = false;
   // -1 inner, +1 outer, 0 auto
   int processingMode = 0;
 
-  // save cache file after load automatically
-  bool autoSaveCache = true;
-  // try load from cache file if file was found
-  bool autoLoadCache = true;
-  // when loading from cache file, memory map it,
-  // rather than loading it into system RAM.
-  bool memoryMappedCache = false;
-
-  // if a scenes geometry data exceeds this, then always do a separate preprocess pass
-  // and use the cache file afterwards
+  // Use SIZE_MAX to always build directly in this simplified sample.
   size_t forcePreprocessMiB = size_t(2) * 1024;
 
   // optional thread-safe progress bar updates
@@ -119,8 +107,7 @@ struct SceneLoaderConfig
 struct SceneGridConfig
 {
   // when set to true each new set of instance on the grid gets
-  // its own unique set of geometries. This stresses the streaming system
-  // and memory consumption a lot more.
+  // its own unique set of geometries and increases memory consumption.
   bool      uniqueGeometriesForCopies = false;
   uint32_t  numCopies                 = 1;
   uint32_t  gridBits                  = 13;
@@ -152,18 +139,12 @@ public:
 
   Result init(const std::filesystem::path& filePath,
               const SceneConfig&           config,
-              const SceneLoaderConfig&     loaderConfig,
-              const std::string&           cacheSuffix,
-              bool                         skipCache);
-  bool   saveCache() const;
+              const SceneLoaderConfig&     loaderConfig);
   void   deinit();
 
   void updateSceneGrid(const SceneGridConfig& gridConfig);
 
-  bool isMemoryMappedCache() const { return m_loadedFromCache && m_cacheFileMapping.valid(); }
-
   const std::filesystem::path& getFilePath() const { return m_filePath; }
-  const std::filesystem::path& getCacheFilePath() const { return m_cacheFilePath; }
 
 
   //////////////////////////////////////////////////////////////////////////
@@ -176,8 +157,7 @@ public:
     uint32_t count;
   };
 
-  // To optimize streaming all cluster groups are stored in a contiguous blob of memory.
-  //
+  // Cluster groups are stored in a contiguous blob of memory.
   struct GroupInfo
   {
     uint64_t offsetBytes : 42;
@@ -341,7 +321,7 @@ public:
   };
 
 
-  // used for preloaded groups, streamed in groups are patched in shaders.
+    // Used for preloaded groups.
   static void fillGroupRuntimeData(const GroupInfo& srcGroupInfo,
                                    const GroupView& srcGroupView,
                                    uint32_t         groupID,
@@ -410,20 +390,6 @@ public:
     // if we have
     std::span<const uint32_t> localMaterialIDs;
 
-    inline uint64_t getCachedSize() const
-    {
-      uint64_t cachedSize = 0;
-
-      cachedSize += (sizeof(GeometryBase) + serialization::ALIGN_MASK) & ~serialization::ALIGN_MASK;
-      cachedSize += serialization::getCachedSize(groupData);
-      cachedSize += serialization::getCachedSize(groupInfos);
-      cachedSize += serialization::getCachedSize(lodLevels);
-      cachedSize += serialization::getCachedSize(lodNodes);
-      cachedSize += serialization::getCachedSize(lodNodeBboxes);
-      cachedSize += serialization::getCachedSize(localMaterialIDs);
-
-      return cachedSize;
-    }
   };
 
   // we virtually instance geometries to avoid higher cpu memory consumption
@@ -484,7 +450,6 @@ public:
   SceneConfig       m_config;
   SceneLoaderConfig m_loaderConfig;
   SceneGridConfig   m_gridConfig;
-  std::string       m_cacheSuffix;
 
   shaderio::BBox m_bbox;
   shaderio::BBox m_gridBbox;
@@ -515,7 +480,6 @@ public:
 
   Histograms m_histograms;
 
-  bool m_loadedFromCache    = false;
   bool m_hasVertexNormals   = false;
   bool m_hasVertexTexCoord0 = false;
   bool m_hasVertexTexCoord1 = false;
@@ -523,8 +487,6 @@ public:
 
   size_t m_originalInstanceCount = 0;
   size_t m_originalGeometryCount = 0;
-
-  size_t m_cacheFileSize = 0;
 
 private:
   //////////////////////////////////////////////////////////////////////////
@@ -561,149 +523,13 @@ private:
   std::vector<GeometryStorage> m_geometryStorages;
   std::vector<GeometryView>    m_geometryViews;
 
-  //////////////////////////////////////////////////////////////////////////
-
-  // Cache File
-
-  static bool     loadCached(GeometryView& view, uint64_t dataSize, const void* data);
-  static bool     storeCached(const GeometryView& view, uint64_t dataSize, void* data);
-  static uint64_t storeCached(const GeometryView& view, FILE* outFile);
-
-  void openCache();
-  void closeCache();
-
-  bool checkCache(const GeometryLodInput& info, size_t geometryIndex);
-  void loadCachedGeometry(GeometryStorage& geometry, size_t geometryIndex);
-
-  class CacheFileHeader
-  {
-  public:
-    CacheFileHeader()
-    {
-      memset(this, 0, sizeof(CacheFileHeader));
-      header = {};
-      config = {};
-    }
-
-    bool isValid() const
-    {
-      Header reference = {};
-
-      return header.magic == reference.magic && header.geoVersion == reference.geoVersion
-             && header.geoStructSize == reference.geoStructSize && header.configStructSize == reference.configStructSize
-             && header.alignment == reference.alignment;
-    }
-
-  private:
-    struct Header
-    {
-      uint64_t magic               = 0x006f65676e73766eULL;  // zippp
-      uint32_t geoVersion          = 7;
-      uint32_t geoStructSize       = uint32_t(sizeof(GeometryView));
-      uint32_t configVersion       = SceneConfig::version;
-      uint32_t configStructSize    = uint32_t(sizeof(SceneConfig));
-      uint32_t histogramsVersion   = Histograms::version;
-      uint32_t histogramStructSize = uint32_t(sizeof(Histograms));
-      uint64_t alignment           = serialization::ALIGNMENT;
-
-      // geoVersion history:
-      // 1 initial
-      // 2 bugfix wrong storage of `lodInfo`
-      // 3 octant vertices
-      // 4 table is 2 x 64-bit per geometry (offset + size) to allow out of order storage
-      // 5
-      // 6 reduced shaderio::Group/Cluster structs using relative offsets
-      // 7 compression
-    };
-
-    Header header;
-
-  public:
-    SceneConfig config;
-    Histograms  histograms;
-    uint32_t    pad[7];
-  };
-
-  static_assert(sizeof(CacheFileHeader) % serialization::ALIGNMENT == 0, "CacheFileHeader size unaligned");
-
-  class CacheFileView
-  {
-    // Optionally if you want to have a simple cache file for this
-    // data, we provide a canonical layout, and this simple class
-    // to open it.
-    //
-    // The cache data must be stored in three sections:
-    //
-#if 0
-    struct CacheFile
-    {
-      // first: library version specific header
-      CacheHeader header;
-      // second: for each geometry serialized data of the `LodGeometryView`
-      uint8_t geometryViewData[];
-      // third: offset table
-      // offsets where each `LodGeometry` data is stored + size
-      // ordered with ascending offsets
-      // `geometryDataSize = geometryOffsets[geometryIndex * 2 + 1];`
-      uint64_t geometryOffsets[geometryCount * 2];
-      uint64_t geometryCount;
-    };
-#endif
-
-  public:
-    bool isValid() const { return m_dataSize != 0; }
-
-    bool init(uint64_t dataSize, const void* data);
-
-    void deinit() { *(this) = {}; }
-
-    uint64_t getGeometryCount() const { return m_geometryCount; }
-
-    void getSceneConfig(SceneConfig& settings) const;
-    void getHistograms(Histograms& histograms) const;
-
-    bool getGeometryView(GeometryView& view, uint64_t geometryIndex) const;
-
-  private:
-    template <class T>
-    const T* getPointer(uint64_t offset, uint64_t count = 1) const
-    {
-      assert(offset + sizeof(T) * count <= m_dataSize);
-      return reinterpret_cast<const T*>(m_dataBytes + offset);
-    }
-
-    uint64_t       m_dataSize      = 0;
-    uint64_t       m_tableStart    = 0;
-    const uint8_t* m_dataBytes     = nullptr;
-    uint64_t       m_geometryCount = 0;
-  };
-
-  struct CachePartialEntry
-  {
-    uint64_t geometryIndex = 0;
-    uint64_t offset        = 0;
-    uint64_t dataSize      = 0;
-  };
-
   std::filesystem::path m_filePath;
-  std::filesystem::path m_cacheFilePath;
-  std::filesystem::path m_cachePartialFilePath;
-
-  // When loading a scene from a cache file, we can actually
-  // directly load all data from the memory mapped file, rather than
-  // copying it into system memory.
-  // This view and mapping are kept alive after init when
-  // `SceneConfig::memoryMappedCache` is true, otherwise they are closed
-  // within `Scene::init`.
-
-  nvutils::FileReadMapping m_cacheFileMapping;
-  CacheFileView            m_cacheFileView;
 
   //////////////////////////////////////////////////////////////////////////
 
   // Processing
 
-  // only used in `processingOnly` mode
+  // Legacy processing-only state is inert in the simplified sample.
   FILE*                 m_processingOnlyFile             = nullptr;
   FILE*                 m_processingOnlyPartialFile      = nullptr;
   size_t                m_processingOnlyPartialCompleted = 0;
@@ -793,7 +619,7 @@ private:
                                  std::unordered_set<struct cgltf_buffer_view*>& bufferViews,
                                  const struct cgltf_data*                       gltf);
 
-  void processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex, bool isCached);
+  void processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex);
 
   void buildGeometryLod(ProcessingInfo& processingInfo, GeometryStorage& geometry);
   void buildHierarchy(ProcessingInfo& processingInfo, GeometryStorage& geometry);
@@ -804,7 +630,7 @@ private:
   void computeHistogramMaxs();
   void computeInstanceBBoxes();
 
-  // these modes always output to the cache directly
+  // Processing-only entry points are no-ops in the simplified sample.
   void beginProcessingOnly(size_t geometryCount);
   void saveProcessingOnly(ProcessingInfo& processingInfo, size_t geometryIndex);
   bool endProcessingOnly(bool hadError);

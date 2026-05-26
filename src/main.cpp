@@ -27,6 +27,7 @@
 
 #include <volk.h>
 #include <imgui/imgui.h>
+#include <nvvk/context.hpp>
 #include <nvvk/validation_settings.hpp>
 #include <nvapp/elem_logger.hpp>
 #include <nvapp/elem_profiler.hpp>
@@ -56,41 +57,28 @@ int main(int argc, char** argv)
   VkPhysicalDeviceShaderSMBuiltinsFeaturesNV smNV = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV};
   VkPhysicalDeviceMeshShaderFeaturesNV       meshNV  = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV};
   VkPhysicalDeviceMeshShaderFeaturesEXT      meshEXT = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
-  VkPhysicalDeviceAccelerationStructureFeaturesKHR accKHR = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR};
-  VkPhysicalDeviceRayQueryFeaturesKHR rayQueryKHR = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR};
-  VkPhysicalDeviceClusterAccelerationStructureFeaturesNV clustersNV = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_FEATURES_NV};
-  VkPhysicalDeviceShaderClockFeaturesKHR clockKHR = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR};
-  VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomicFloatFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
-  VkPhysicalDeviceFragmentShadingRateFeaturesKHR shadingRateFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR};
   VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR barycentricFeatures{
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR};
-  VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT shaderImageAtomic64Features{
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT};
+
+  smNV.shaderSMBuiltins                   = VK_TRUE;
+  meshNV.taskShader                       = VK_TRUE;
+  meshNV.meshShader                       = VK_TRUE;
+  meshEXT.taskShader                      = VK_TRUE;
+  meshEXT.meshShader                      = VK_TRUE;
+  barycentricFeatures.fragmentShaderBarycentric = VK_TRUE;
 
   nvvk::ContextInitInfo vkSetup{
       .instanceExtensions = {VK_EXT_DEBUG_UTILS_EXTENSION_NAME},
       .deviceExtensions   = {{VK_KHR_SWAPCHAIN_EXTENSION_NAME}},
       .queues             = {VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_TRANSFER_BIT},
+      .enableAllFeatures  = false,
   };
 
   vkSetup.deviceExtensions.push_back({VK_EXT_MESH_SHADER_EXTENSION_NAME, &meshEXT});
-  vkSetup.deviceExtensions.push_back({VK_KHR_SHADER_CLOCK_EXTENSION_NAME, &clockKHR});
-  vkSetup.deviceExtensions.push_back({VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, &atomicFloatFeatures});
-
-  // not used, but to silence validation layer
-  vkSetup.deviceExtensions.push_back({VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, &shadingRateFeatures});
-  // used for compute rasterization
-  vkSetup.deviceExtensions.push_back({VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME, &shaderImageAtomic64Features});
 
 #if 1
-
-  // set to version 2 compatibility instead of VK_NV_CLUSTER_ACCELERATION_STRUCTURE_SPEC_VERSION to cover more drivers
-  vkSetup.deviceExtensions.push_back({VK_NV_CLUSTER_ACCELERATION_STRUCTURE_EXTENSION_NAME, &clustersNV, false, 2});
-
   vkSetup.deviceExtensions.push_back({VK_NV_SHADER_SM_BUILTINS_EXTENSION_NAME, &smNV, false});
   vkSetup.deviceExtensions.push_back({VK_NV_MESH_SHADER_EXTENSION_NAME, &meshNV, false});
-
   vkSetup.deviceExtensions.push_back({VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME, &barycentricFeatures, false});
 #endif
 
@@ -208,9 +196,7 @@ int main(int argc, char** argv)
     ImGui::DockBuilderDockWindow("Log", loggerID);
     ImGuiID profilerID = ImGui::DockBuilderSplitNode(loggerID, ImGuiDir_Right, 0.75F, nullptr, &loggerID);
     ImGui::DockBuilderDockWindow("Profiler", profilerID);
-    ImGuiID streamingID = ImGui::DockBuilderSplitNode(profilerID, ImGuiDir_Right, 0.66F, nullptr, &profilerID);
-    ImGui::DockBuilderDockWindow("Streaming memory", streamingID);
-    ImGuiID statisticsID = ImGui::DockBuilderSplitNode(streamingID, ImGuiDir_Right, 0.5F, nullptr, &streamingID);
+    ImGuiID statisticsID = ImGui::DockBuilderSplitNode(profilerID, ImGuiDir_Right, 0.5F, nullptr, &profilerID);
     ImGui::DockBuilderDockWindow("Statistics", statisticsID);
   };
 

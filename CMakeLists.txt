@@ -9,12 +9,38 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(NvproCore2 REQUIRED)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_CXX_STANDARD 20)
-file(GLOB SOURCE_FILES src/*.*)
-file(GLOB SHADER_FILES shaders/*.glsl shaders/*.h)
-file(GLOB VK_RADIX_SORT_FILES thirdparty/vulkan_radix_sort/src/vk_radix_sort.cc)
+set(SOURCE_FILES
+  src/cgltf.cpp
+  src/clusterlod.cpp
+  src/lodclusters.cpp
+  src/main.cpp
+  src/meshlod.cpp
+  src/preloaded.cpp
+  src/renderer.cpp
+  src/renderer_clusters_lod.cpp
+  src/resources.cpp
+  src/scene.cpp
+  src/scene_cluster_compression.cpp
+  src/scene_gltf.cpp
+)
+set(SHADER_FILES
+  shaders/attribute_encoding.h
+  shaders/build_setup.comp.glsl
+  shaders/clusters.mesh.glsl
+  shaders/frag.glsl
+  shaders/fullscreen.vert.glsl
+  shaders/fullscreen_background.frag.glsl
+  shaders/render_shading.glsl
+  shaders/shaderio.h
+  shaders/shaderio_building.h
+  shaders/shaderio_core.h
+  shaders/shaderio_scene.h
+  shaders/traversal.glsl
+  shaders/traversal_init.comp.glsl
+  shaders/traversal_run.comp.glsl
+)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/vulkan_radix_sort/include)
-add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${SHADER_FILES} ${VK_RADIX_SORT_FILES})
+add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${SHADER_FILES})
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvapp
@@ -37,4 +63,3 @@ copy_to_runtime_and_install( ${PROJECT_NAME}
     LOCAL_DIRS "${CMAKE_CURRENT_LIST_DIR}/shaders"
     AUTO
 )
-

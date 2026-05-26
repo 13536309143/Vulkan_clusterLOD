@@ -8,45 +8,32 @@
 #include "resources.hpp"
 #include "scene.hpp"
 #include "preloaded.hpp"
-#include "streaming.hpp"
 namespace lodclusters {
 
 class RenderScene
 {
 public:
   const Scene*   scene        = nullptr;
-  bool           useStreaming = false;
   ScenePreloaded scenePreloaded;
-  SceneStreaming sceneStreaming;
 
   // pointers must stay valid during lifetime
-  bool init(Resources* res, const Scene* scene_, const StreamingConfig& streamingConfig_, bool useStreaming_);
+  bool init(Resources* res, const Scene* scene_);
   void deinit();
-
-  void streamingReset();
 
   const nvvk::BufferTyped<shaderio::Geometry>& getShaderGeometriesBuffer() const;
 
   size_t                                       getOperationsSize() const;
-  size_t                                       getGeometrySize(bool reserved) const;
+  size_t                                       getGeometrySize() const;
 };
 
 struct RendererConfig
 {
   bool flipWinding               = false;
   bool forceTwoSided             = false;
-  bool useForcedInvisibleCulling = false;
-  bool useSorting                = false;
   bool useRenderStats            = false;
-  bool useCulling                = true;
-  bool useTwoPassCulling         = false;
   bool useShading                = true;
   bool useDebugVisualization     = true;
-  bool useSeparateGroups         = true;
   bool useEXTmeshShader          = false;
-  bool useComputeRaster          = false;
-  bool useAdaptiveRasterRouting  = false;
-  bool usePrimitiveCulling       = false;
   bool useDepthOnly              = false;
   // the maximum number of renderable clusters per frame in bits i.e. (1 << number)
   uint32_t numRenderClusterBits = 22;
@@ -90,35 +77,21 @@ protected:
   bool initBasicShaders(Resources& res, RenderScene& rscene, const RendererConfig& config);
   void initBasicPipelines(Resources& res, RenderScene& rscene, const RendererConfig& config);
   void updateBasicDescriptors(Resources& res, RenderScene& scene, const nvvk::Buffer* sceneBuildBuffer = nullptr);
-  void writeAtomicRaster(VkCommandBuffer cmd);
   void writeBackgroundSky(VkCommandBuffer cmd);
-  void renderInstanceBboxes(VkCommandBuffer cmd);
-  void renderClusterBboxes(VkCommandBuffer cmd, nvvk::Buffer sceneBuildBuffer);
   struct BasicShaders
   {
     shaderc::SpvCompilationResult fullScreenVertexShader;
-    shaderc::SpvCompilationResult fullScreenWriteDepthFragShader;
     shaderc::SpvCompilationResult fullScreenBackgroundFragShader;
-    shaderc::SpvCompilationResult fullscreenAtomicRasterFragmentShader;
-    shaderc::SpvCompilationResult renderInstanceBboxesFragmentShader;
-    shaderc::SpvCompilationResult renderInstanceBboxesMeshShader;
-    shaderc::SpvCompilationResult renderClusterBboxesMeshShader;
-    shaderc::SpvCompilationResult renderClusterBboxesFragmentShader;
   };
   struct BasicPipelines
   {
-    VkPipeline writeDepth{};
     VkPipeline background{};
-    VkPipeline atomicRaster{};
-    VkPipeline renderInstanceBboxes{};
-    VkPipeline renderClusterBboxes{};
   };
 
   RendererConfig m_config;
   uint32_t       m_maxRenderClusters       = 0;
   uint32_t       m_maxTraversalTasks       = 0;
   uint32_t       m_meshShaderWorkgroupSize = 0;
-  uint32_t       m_meshShaderBoxes         = 0;
   uint32_t       m_frameIndex              = 0;
   BasicShaders   m_basicShaders;
   BasicPipelines m_basicPipelines;
@@ -132,8 +105,6 @@ protected:
   nvvk::DescriptorPack m_basicDset;
   VkShaderStageFlags   m_basicShaderFlags{};
   VkPipelineLayout     m_basicPipelineLayout{};
-
-  nvvk::Buffer m_sortingAuxBuffer;
 };
 
 /////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,5 @@
 #pragma once
+#include <filesystem>
 #include <span>
 #if __INTELLISENSE__
 #undef VK_NO_PROTOTYPES
@@ -17,12 +18,10 @@
 #include <nvvk/graphics_pipeline.hpp>
 #include <nvvk/profiler_vk.hpp>
 #include <nvvkglsl/glsl.hpp>
-#include <vk_radix_sort.h>
 
 #if VK_HEADER_VERSION < 309
 #error Update Vulkan SDK >= 1.4.309.0
 #endif
-#include "hiz.hpp"
 #include "../shaders/shaderio.h"
 
 namespace lodclusters {
@@ -31,42 +30,16 @@ struct FrameConfig
 {
   VkExtent2D windowSize;
 
-  bool  showInstanceBboxes = false;
-  bool  showClusterBboxes  = false;
-  bool  freezeCulling      = false;
   bool  freezeLoD          = false;
   float lodPixelError      = 1.0f;
-  // increase error by this for instances not having primary visibility in ray tracing
-  float culledErrorScale = 2.0f;
-  // if less pixels than this, use sw raster
-  float swRasterThreshold = 8.0f;
-  // if more triangles than this per projected pixel, prefer sw raster for tiny dense clusters
-  float swRasterTriangleDensityThreshold = 0.5f;
-  bool  swRasterFeedbackEnabled = false;
-  float swRasterFeedbackTargetTriangleShare = 0.15f;
-  float swRasterThresholdEffective = 8.0f;
-  float swRasterTriangleDensityThresholdEffective = 0.5f;
-
-  // how many frames until we schedule a group for unloading
-  uint32_t streamingAgeThreshold = 16;
-
   // how much threads to use in the persistent kernels
   uint32_t traversalPersistentThreads = 2048;
-
-  uint32_t sharingTolerantLevels = 7;
-  uint32_t sharingEnabledLevels  = 8;
-  bool     sharingPushCulled     = true;
-
-  uint32_t cachingEnabledLevels = 8;
-  uint32_t cachingAgeThreshold  = 16;
 
   uint32_t visualize = VISUALIZE_LOD;
 
   shaderio::FrameConstants frameConstants;
   shaderio::FrameConstants frameConstantsLast;
   glm::mat4                traversalViewMatrix;
-  glm::mat4                cullViewProjMatrix;
-  glm::mat4                cullViewProjMatrixLast;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -195,10 +168,7 @@ public:
     nvvk::Image imgDepthStencil  = {};
 
     VkImageView viewDepth = VK_NULL_HANDLE;
-    nvvk::Image imgRasterAtomic = {};
-    //nvvk::Image imgHizFar = {};
     // 现在：双 HIZ 图像数组
-    nvvk::Image imgHizFar[2] = {};
 
     VkPipelineRenderingCreateInfo pipelineRenderingInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
   };
@@ -215,8 +185,6 @@ public:
   void postProcessFrame(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler);
   void emptyFrame(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler);
   void endFrame();
-  //void cmdBuildHiz(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler);添加索引参数
-  void cmdBuildHiz(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler, uint32_t idx);
 
   // some vulkan implementations only support 16 bit per grid component
   // need to convert the 1D intended launch into a grid.
@@ -622,13 +590,7 @@ private:
   bool m_supportsBarycentrics      = false;
   bool m_supportsSmBuiltinsNV      = false;
   bool m_dumpSpirv                 = false;
-  NVHizVK                       m_hiz;
-  //NVHizVK::Update               m_hizUpdate;
-  NVHizVK::Update               m_hizUpdate[2];
-  shaderc::SpvCompilationResult m_hizShaders[NVHizVK::SHADER_COUNT];
-
   QueueStateManager m_queueStates;
-  VrdxSorter        m_vrdxSorter{};
 
   // Memory pools for efficient memory management
   std::unique_ptr<MemoryPool> m_tempCmdBufferPool;
