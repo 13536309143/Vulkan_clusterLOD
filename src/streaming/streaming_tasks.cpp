@@ -1,6 +1,10 @@
+/*
+ * File: src/streaming/streaming_tasks.cpp
+ * Purpose: Implementation of streaming request, resident, allocator, update, and storage task helpers.
+ */
 //流式传输相关的底层工具辅助函数
 #include <volk.h>
-#include "streamutils.hpp"
+#include "streaming_tasks.hpp"
 namespace lodclusters {
 
 // StreamingRequests

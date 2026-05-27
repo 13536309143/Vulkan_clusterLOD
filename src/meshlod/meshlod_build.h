@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_build.h
+ * Purpose: Mesh LOD build orchestration for levels, groups, clusters, and output layout.
+ */
 #pragma once
 #include "meshlod_impl.h"
 #include "meshlod_bounds.h"

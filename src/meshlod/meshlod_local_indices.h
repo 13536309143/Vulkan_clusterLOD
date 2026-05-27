@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_local_indices.h
+ * Purpose: Mesh LOD local index remapping helpers for compact cluster output.
+ */
 #pragma once
 #include "meshlod_types.h"
 #include <cassert>

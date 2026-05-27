@@ -1,3 +1,7 @@
+/*
+ * File: src/scene/scene.hpp
+ * Purpose: Scene data model: materials, instances, geometry storage, cluster groups, LOD nodes, and loader configuration.
+ */
 #pragma once
 #include <vector>
 #include <array>

@@ -1,4 +1,8 @@
 /*
+ * File: shaders/build/indirect_build_setup.comp.glsl
+ * Purpose: Compute shader that prepares indirect dispatch and draw commands for the render pass.
+ */
+/*
 第一遍 Pass (pass = 0)
   ↓
 收集初步的culling结果

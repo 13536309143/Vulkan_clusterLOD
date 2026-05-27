@@ -1,3 +1,7 @@
+/*
+ * File: shaders/debug/render_instance_bbox.mesh.glsl
+ * Purpose: Mesh shader for drawing instance bounding boxes.
+ */
 #version 460
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : enable

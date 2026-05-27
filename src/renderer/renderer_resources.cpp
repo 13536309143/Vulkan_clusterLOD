@@ -1,10 +1,14 @@
+/*
+ * File: src/renderer/renderer_resources.cpp
+ * Purpose: Implementation of Vulkan resource creation, shader compilation, Hi-Z setup, frame buffers, and readback.
+ */
 #include <volk.h>
 #include <nvutils/file_operations.hpp>
 #include <nvutils/logger.hpp>
 #include <nvutils/spirv.hpp>
 #include <nvvk/barriers.hpp>
 #include <nvvk/formats.hpp>
-#include "resources.hpp"
+#include "renderer_resources.hpp"
 
 namespace lodclusters {
 
@@ -241,7 +245,7 @@ void Resources::init(VkDevice device, VkPhysicalDevice physicalDevice, VkInstanc
     {
       shaderc::CompileOptions options = makeCompilerOptions();
       m_hiz.appendShaderDefines(i, options);
-      compileShader(shaderResults[i], VK_SHADER_STAGE_COMPUTE_BIT, "post/hiz.comp.glsl", &options);
+      compileShader(shaderResults[i], VK_SHADER_STAGE_COMPUTE_BIT, "post/hierarchical_z.comp.glsl", &options);
     }
     m_hiz.initPipelines(shaderResults);
   }

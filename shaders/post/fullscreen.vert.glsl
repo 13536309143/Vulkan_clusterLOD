@@ -1,3 +1,7 @@
+/*
+ * File: shaders/post/fullscreen.vert.glsl
+ * Purpose: Fullscreen triangle vertex shader used by post and background passes.
+ */
 #version 460
 layout(location = 0) out vec2 uv;
 void main()

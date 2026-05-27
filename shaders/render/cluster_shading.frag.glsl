@@ -1,3 +1,7 @@
+/*
+ * File: shaders/render/cluster_shading.frag.glsl
+ * Purpose: Fragment shader for cluster shading, material evaluation, picking data, and raster output.
+ */
 #version 460
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : enable
@@ -44,7 +48,7 @@ layout(scalar, binding = BINDINGS_STREAMING_SSBO, set = 0) buffer streamingBuffe
 layout(set = 0, binding = BINDINGS_RASTER_ATOMIC, r64ui) uniform u64image2D imgRasterAtomic;
 #endif
 #include "attribute_encoding.h" // 引入法线/切线解压函数
-#include "render_shading.glsl"  // 引入具体的光照计算函数
+#include "cluster_shading_common.glsl"  // 引入具体的光照计算函数
 // ==================== 着色器输入输出 ====================
 // 从顶点着色器/网格着色器传来的插值数据
 layout(location = 0) in Interpolants {

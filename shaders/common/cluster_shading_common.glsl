@@ -1,3 +1,7 @@
+/*
+ * File: shaders/common/cluster_shading_common.glsl
+ * Purpose: Shared cluster shading functions used by fragment and software raster render paths.
+ */
 #extension GL_EXT_fragment_shader_barycentric : enable
 vec3 batlow(float t)
 {

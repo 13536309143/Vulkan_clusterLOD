@@ -1,3 +1,7 @@
+/*
+ * File: shaders/traversal/traversal_presort.comp.glsl
+ * Purpose: Compute shader that computes traversal sort keys before LOD traversal.
+ */
 
 #version 460
 #extension GL_GOOGLE_include_directive : enable

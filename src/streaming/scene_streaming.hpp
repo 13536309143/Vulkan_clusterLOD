@@ -1,5 +1,9 @@
+/*
+ * File: src/streaming/scene_streaming.hpp
+ * Purpose: Streaming scene GPU representation and public operations for streaming geometry residency.
+ */
 #pragma once
-#include "streamutils.hpp"
+#include "streaming_tasks.hpp"
 namespace lodclusters {
 
 class SceneStreaming

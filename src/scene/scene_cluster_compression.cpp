@@ -1,3 +1,7 @@
+/*
+ * File: src/scene/scene_cluster_compression.cpp
+ * Purpose: Cluster attribute compression and decompression helpers for compact GPU geometry storage.
+ */
 //集群数据进行压缩
 #include <bit>
 // 引入算法库，提供 std::min, std::max 等函数

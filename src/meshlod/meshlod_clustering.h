@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_clustering.h
+ * Purpose: Mesh LOD spatial clustering helpers for grouping triangles and cluster candidates.
+ */
 #pragma once
 #include "meshlod_impl.h"
 

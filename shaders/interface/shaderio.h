@@ -1,3 +1,7 @@
+/*
+ * File: shaders/interface/shaderio.h
+ * Purpose: Main shader interface header combining all CPU/GPU shared layouts.
+ */
 #ifndef _SHADERIO_H_
 #define _SHADERIO_H_
 #include "shaderio_core.h"

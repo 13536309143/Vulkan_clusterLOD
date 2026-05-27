@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_types.h
+ * Purpose: Shared mesh LOD input, output, group, cluster, and helper data structures.
+ */
 #pragma once
 #include <stddef.h>
 

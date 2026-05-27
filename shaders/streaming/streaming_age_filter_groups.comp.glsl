@@ -1,3 +1,7 @@
+/*
+ * File: shaders/streaming/streaming_age_filter_groups.comp.glsl
+ * Purpose: Compute shader that ages resident streaming groups and requests unloads.
+ */
 #version 460
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : enable

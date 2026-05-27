@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/lod.h
+ * Purpose: Standalone meshoptimizer-based LOD helper declarations kept for compatibility with earlier code paths.
+ */
 #pragma once
 #include <stddef.h>
 struct clodConfig

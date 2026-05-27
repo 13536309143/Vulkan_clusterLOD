@@ -1,3 +1,7 @@
+/*
+ * File: shaders/interface/shaderio_core.h
+ * Purpose: Core shader interface types, constants, utility math, and launch-grid helpers.
+ */
 #ifndef _SHADERIO_CORE_H_
 #define _SHADERIO_CORE_H_
 #ifndef SUBGROUP_SIZE

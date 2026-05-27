@@ -1,5 +1,9 @@
 /*
- * SWclusters.comp.glsl
+ * File: shaders/render/software_cluster_raster.comp.glsl
+ * Purpose: Compute shader software rasterization path for visible clusters.
+ */
+/*
+ * software_cluster_raster.comp.glsl
  * 
  * 软件集群渲染计算着色器，负责渲染LOD集群中的三角形
  * 
@@ -109,7 +113,7 @@ const uint MESHLET_VERTEX_ITERATIONS = ((CLUSTER_VERTEX_COUNT + COMPUTE_WORKGROU
 const uint MESHLET_TRIANGLE_ITERATIONS = ((CLUSTER_TRIANGLE_COUNT + COMPUTE_WORKGROUP_SIZE - 1) / COMPUTE_WORKGROUP_SIZE);
 
 #include "culling.glsl"
-#include "render_shading.glsl"
+#include "cluster_shading_common.glsl"
 
 /**
  * 计算边缘函数值，用于光栅化中的重心坐标计算

@@ -1,6 +1,10 @@
+/*
+ * File: src/renderer/preloaded_scene_gpu.cpp
+ * Purpose: Builds GPU buffers for non-streaming scenes and uploads geometry, groups, clusters, LOD nodes, and BLAS data.
+ */
 //直接加载
 #include <volk.h>
-#include "preloaded.hpp"
+#include "preloaded_scene_gpu.hpp"
 
 namespace lodclusters {
 

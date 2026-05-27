@@ -1,3 +1,7 @@
+/*
+ * File: shaders/interface/shaderio_building.h
+ * Purpose: Scene-building shader interface layouts for traversal, indirect commands, sorting, and cluster build output.
+ */
 #include "shaderio_streaming.h"
 #ifndef _SHADERIO_BUILDING_H_
 #define _SHADERIO_BUILDING_H_

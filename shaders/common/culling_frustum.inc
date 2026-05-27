@@ -1,4 +1,8 @@
 /*
+ * File: shaders/common/culling_frustum.inc
+ * Purpose: Frustum intersection helpers for instance, geometry, group, and cluster culling.
+ */
+/*
 
 视锥体剔除相关函数
 - intersectSize - 计算包围盒在屏幕上的大小

@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_simplify.h
+ * Purpose: Mesh LOD simplification logic and error/attribute weighting helpers.
+ */
 #pragma once
 #include "meshlod_impl.h"
 

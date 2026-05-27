@@ -1,13 +1,6 @@
 /*
- * main.cpp
- * 
- * 主入口文件，负责初始化Vulkan上下文、创建应用程序实例并运行LOD Clusters示例
- * 
- * 主要功能：
- * - 初始化Vulkan相关扩展和特性
- * - 创建应用程序实例和各种UI元素
- * - 处理命令行参数
- * - 运行主应用循环
+ * File: src/app/main.cpp
+ * Purpose: Application entry point. Creates the nvpro app, parses startup options, and installs LodClusters elements.
  */
 
 #ifndef NDEBUG
@@ -36,7 +29,7 @@
 #include <nvapp/elem_sequencer.hpp>
 #include <nvutils/parameter_parser.hpp>
 
-#include "lodclusters.hpp"
+#include "lod_clusters_app.hpp"
 
 using namespace lodclusters;
 

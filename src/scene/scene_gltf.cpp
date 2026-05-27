@@ -1,3 +1,7 @@
+/*
+ * File: src/scene/scene_gltf.cpp
+ * Purpose: glTF scene import path. Reads meshes, materials, attributes, indices, transforms, and instance data.
+ */
 //锟斤拷锟斤拷锟斤拷图锟斤拷锟
 #include <float.h>
 #include <unordered_map>

@@ -1,3 +1,7 @@
+/*
+ * File: src/renderer/renderer_resources.hpp
+ * Purpose: Vulkan resource manager for buffers, images, framebuffers, shader compilation, upload, and profiling helpers.
+ */
 #pragma once
 #include <span>
 #if __INTELLISENSE__
@@ -22,7 +26,7 @@
 #if VK_HEADER_VERSION < 309
 #error Update Vulkan SDK >= 1.4.309.0
 #endif
-#include "hiz.hpp"
+#include "hierarchical_z.hpp"
 #include "shaderio.h"
 
 namespace lodclusters {

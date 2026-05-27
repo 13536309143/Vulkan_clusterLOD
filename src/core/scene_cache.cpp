@@ -1,4 +1,7 @@
-//缓存
+/*
+ * File: src/core/scene_cache.cpp
+ * Purpose: Scene cache load/save implementation for processed geometry, cluster data, and partial processing results.
+ */
 
 #include <nvutils/file_operations.hpp>
 #include <nvutils/parallel_work.hpp>

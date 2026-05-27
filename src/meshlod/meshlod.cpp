@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod.cpp
+ * Purpose: Entry point for mesh LOD generation using bounds, clustering, simplification, build, and local-index helpers.
+ */
 #include <meshoptimizer.h>
 #include "meshlod.h"
 #include "meshlod_bounds.h"

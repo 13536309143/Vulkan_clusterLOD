@@ -1,3 +1,7 @@
+/*
+ * File: src/app/lod_clusters_ui.cpp
+ * Purpose: ImGui UI for renderer settings, scene loading controls, profiling, statistics, and debug panels.
+ */
 //交互界面
 #include <cinttypes>
 #include <filesystem>
@@ -12,7 +16,7 @@
 #include <nvgui/property_editor.hpp>
 #include <nvgui/window.hpp>
 #include <nvgui/file_dialog.hpp>
-#include "lodclusters.hpp"
+#include "lod_clusters_app.hpp"
 namespace lodclusters {
 #define MEMORY_WITH_BINARY_PREFIXES 1
 std::string formatMemorySize(size_t sizeInBytes)

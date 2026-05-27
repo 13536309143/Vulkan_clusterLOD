@@ -1,5 +1,9 @@
 /*
- * lodclusters.hpp
+ * File: src/app/lod_clusters_app.hpp
+ * Purpose: Top-level LodClusters application state and public callbacks for loading, rendering, UI, and sequencing.
+ */
+/*
+ * lod_clusters_app.hpp
  * 
  * LOD Clusters主类定义，负责管理场景、渲染器和用户界面
  * 

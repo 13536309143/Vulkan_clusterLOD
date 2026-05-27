@@ -1,8 +1,12 @@
+/*
+ * File: src/renderer/hierarchical_z.cpp
+ * Purpose: Hi-Z Vulkan helper implementation for samplers, descriptors, pipelines, images, and dispatch.
+ */
 //层级 Z-Buffer（Hi-Z Map）的生成
 #include <cassert>
 #include <volk.h>
 #include <fmt/format.h>
-#include "hiz.hpp"
+#include "hierarchical_z.hpp"
 static const VkFormat NVHIZ_FORMAT = VK_FORMAT_R32_SFLOAT;
 
 void NVHizVK::TextureInfo::getShaderFactors(float factors[4]) const

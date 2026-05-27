@@ -1,7 +1,11 @@
+/*
+ * File: src/streaming/scene_streaming.cpp
+ * Purpose: Streaming scene implementation: resident initialization, load/unload scheduling, BLAS caching, and shader dispatch.
+ */
 //流式传输
 #include <volk.h>
 #include <fmt/format.h>
-#include "streaming.hpp"
+#include "scene_streaming.hpp"
 #define STREAMING_DEBUG_FORCE_REQUESTS 0
 namespace lodclusters {
 
@@ -958,9 +962,9 @@ bool SceneStreaming::initShadersAndPipelines()
   shaderc::CompileOptions optionsRaster = options;
   optionsRaster.AddMacroDefinition("TARGETS_RASTERIZATION", "1");
 
-  res.compileShader(m_shaders.computeAgeFilterGroups, VK_SHADER_STAGE_COMPUTE_BIT, "streaming/stream_agefilter_groups.comp.glsl", &options);
-  res.compileShader(m_shaders.computeSetup, VK_SHADER_STAGE_COMPUTE_BIT, "streaming/stream_setup.comp.glsl", &options);
-  res.compileShader(m_shaders.computeUpdateSceneRaster, VK_SHADER_STAGE_COMPUTE_BIT, "streaming/stream_update_scene.comp.glsl", &optionsRaster);
+  res.compileShader(m_shaders.computeAgeFilterGroups, VK_SHADER_STAGE_COMPUTE_BIT, "streaming/streaming_age_filter_groups.comp.glsl", &options);
+  res.compileShader(m_shaders.computeSetup, VK_SHADER_STAGE_COMPUTE_BIT, "streaming/streaming_request_setup.comp.glsl", &options);
+  res.compileShader(m_shaders.computeUpdateSceneRaster, VK_SHADER_STAGE_COMPUTE_BIT, "streaming/streaming_scene_update.comp.glsl", &optionsRaster);
 
   if(!res.verifyShaders(m_shaders))
   {

@@ -1,3 +1,7 @@
+/*
+ * File: shaders/interface/shaderio_streaming.h
+ * Purpose: Streaming shader interface layouts for resident data, requests, updates, allocator state, and patches.
+ */
 #include "shaderio_scene.h"
 #ifndef _SHADERIO_STREAMING_H_
 #define _SHADERIO_STREAMING_H_

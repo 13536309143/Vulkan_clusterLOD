@@ -1,4 +1,8 @@
 /*
+ * File: shaders/common/culling_constants.inc
+ * Purpose: Culling constants shared by traversal and raster shaders.
+ */
+/*
 
 常量定义文件，包含 culling 相关的所有常量
 

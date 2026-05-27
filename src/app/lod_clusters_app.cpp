@@ -1,3 +1,7 @@
+/*
+ * File: src/app/lod_clusters_app.cpp
+ * Purpose: Top-level LodClusters application logic, scene loading, renderer setup, frame updates, and picking.
+ */
 // LodClusters 主文件 - 实现基于LOD (Level of Detail) 技术的集群渲染系统
 // 该文件包含了LOD集群的核心功能，包括场景加载、渲染器初始化、相机控制等
 #include <thread>
@@ -5,7 +9,7 @@
 #include <fmt/format.h>
 #include <nvutils/file_operations.hpp>
 #include <nvgui/camera.hpp>
-#include "lodclusters.hpp"
+#include "lod_clusters_app.hpp"
 bool g_verbose = false;
 namespace lodclusters {
 // LodClusters 构造函数
@@ -1058,7 +1062,7 @@ void LodClusters::onRender(VkCommandBuffer cmd)
       //frameConstants.hizSizeMax = m_resources.m_hizUpdate.farInfo.getSizeMax();
       m_resources.m_hizUpdate[0].farInfo.getShaderFactors((float*)&frameConstants.hizSizeFactors);
       frameConstants.hizSizeMax = m_resources.m_hizUpdate[0].farInfo.getSizeMax();
-      // 注：在 resources.hpp 中定义了：
+      // 注：在 renderer_resources.hpp 中定义了：
       // NVHizVK::Update m_hizUpdate[2];
       // [0] = 前一帧 HiZ
       // [1] = 当前帧 HiZ（用于时间上的平滑过渡）

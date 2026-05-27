@@ -1,7 +1,11 @@
+/*
+ * File: src/renderer/preloaded_scene_gpu.hpp
+ * Purpose: GPU upload path for fully preloaded scene geometry and shader-visible geometry buffers.
+ */
 #pragma once
 
 #include "scene.hpp"
-#include "resources.hpp"
+#include "renderer_resources.hpp"
 
 namespace lodclusters {
 

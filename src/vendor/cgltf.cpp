@@ -1,3 +1,7 @@
+/*
+ * File: src/vendor/cgltf.cpp
+ * Purpose: Single-file cgltf implementation unit compiled into this target.
+ */
 #define _CRT_SECURE_NO_WARNINGS
 #define CGLTF_IMPLEMENTATION
 #if !defined(NDEBUG)

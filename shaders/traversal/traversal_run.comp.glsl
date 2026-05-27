@@ -1,3 +1,7 @@
+/*
+ * File: shaders/traversal/traversal_run.comp.glsl
+ * Purpose: Main compute shader for LOD traversal, culling, render list generation, and streaming requests.
+ */
 //当 USE_SEPARATE_GROUPS = false 时，它不仅处理内部节点，连最底层的微网格簇（Clusters）也一并处理；但当 USE_SEPARATE_GROUPS = true 时，它被限制为仅处理树的内部节点。
 //负责遍历庞大的 BVH（层次包围盒）树结构
 //主要做出“粗粒度决策”，通过视锥体和遮挡剔除快速剔除掉不可见的大片区域（Nodes）。

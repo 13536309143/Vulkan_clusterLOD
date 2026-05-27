@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_impl.h
+ * Purpose: Internal mesh LOD implementation helpers shared by build, clustering, bounds, and simplification code.
+ */
 #pragma once
 #include "meshlod_types.h"
 #include <float.h>

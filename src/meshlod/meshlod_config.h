@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_config.h
+ * Purpose: Mesh LOD configuration defaults and tuning values.
+ */
 #pragma once
 #include "meshlod_types.h"
 

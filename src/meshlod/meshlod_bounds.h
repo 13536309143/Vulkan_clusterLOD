@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod_bounds.h
+ * Purpose: Mesh LOD bounding volume and spatial metric helpers.
+ */
 #pragma once
 #include "meshlod_impl.h"
 

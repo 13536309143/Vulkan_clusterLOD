@@ -1,3 +1,7 @@
+/*
+ * File: src/renderer/renderer.hpp
+ * Purpose: Renderer interfaces, render-scene abstraction, pipeline state, shader handles, and draw configuration.
+ */
 #pragma once
 #if __INTELLISENSE__
 #undef VK_NO_PROTOTYPES
@@ -5,10 +9,10 @@
 #include <memory>
 
 #include <nvvk/compute_pipeline.hpp>
-#include "resources.hpp"
+#include "renderer_resources.hpp"
 #include "scene.hpp"
-#include "preloaded.hpp"
-#include "streaming.hpp"
+#include "preloaded_scene_gpu.hpp"
+#include "scene_streaming.hpp"
 namespace lodclusters {
 
 class RenderScene

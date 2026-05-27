@@ -1,3 +1,7 @@
+/*
+ * File: shaders/render/cluster_mesh.mesh.glsl
+ * Purpose: Primary mesh shader that expands visible clusters into mesh shader output primitives.
+ */
 //从显存中读取簇（Cluster）的顶点和索引数据、进行矩阵变换、执行可选的微小图元剔除，并最终将图元输出给硬件光栅化器。
 #version 460
 #extension GL_GOOGLE_include_directive : enable

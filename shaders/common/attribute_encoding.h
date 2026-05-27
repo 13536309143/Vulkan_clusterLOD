@@ -1,3 +1,7 @@
+/*
+ * File: shaders/common/attribute_encoding.h
+ * Purpose: Shared C++/GLSL helpers for packing and unpacking normals, tangents, and vertex attributes.
+ */
 ////压缩和解压算法
 #ifndef _ATTRIBUTE_ENCODING_H_
 #define _ATTRIBUTE_ENCODING_H_

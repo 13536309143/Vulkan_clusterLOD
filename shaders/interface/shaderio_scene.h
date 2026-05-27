@@ -1,3 +1,7 @@
+/*
+ * File: shaders/interface/shaderio_scene.h
+ * Purpose: Scene shader interface layouts for geometry, groups, clusters, instances, readback, and frame constants.
+ */
 #include "shaderio_core.h"
 #ifndef _SHADERIO_SCENE_H_
 #define _SHADERIO_SCENE_H_

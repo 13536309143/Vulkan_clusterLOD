@@ -1,3 +1,7 @@
+/*
+ * File: shaders/post/atomic_raster_resolve.frag.glsl
+ * Purpose: Fullscreen resolve pass for atomic software raster output.
+ */
 
 #version 460
 #extension GL_GOOGLE_include_directive : enable

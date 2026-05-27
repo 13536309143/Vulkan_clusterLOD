@@ -1,3 +1,7 @@
+/*
+ * File: src/streaming/streaming_tasks.hpp
+ * Purpose: Streaming helper types for request readback, resident lists, allocator state, updates, and storage tasks.
+ */
 #pragma once
 #include <queue>
 #include <nvutils/logger.hpp>
@@ -5,7 +9,7 @@
 #include <nvvk/buffer_suballocator.hpp>
 #include <nvvk/command_pools.hpp>
 #include "scene.hpp"
-#include "resources.hpp"
+#include "renderer_resources.hpp"
 #include "shaderio_streaming.h"
 namespace lodclusters {
 

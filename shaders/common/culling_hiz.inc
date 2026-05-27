@@ -1,4 +1,8 @@
 /*
+ * File: shaders/common/culling_hiz.inc
+ * Purpose: Hi-Z occlusion test helpers used by traversal and rendering shaders.
+ */
+/*
 
 HiZ 层级深度遮挡剔除相关函数
 intersectHiz - 层级深度遮挡剔除函数，支持双遍剔除

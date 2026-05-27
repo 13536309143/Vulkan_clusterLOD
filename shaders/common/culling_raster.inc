@@ -1,4 +1,8 @@
 /*
+ * File: shaders/common/culling_raster.inc
+ * Purpose: Software raster culling helpers for primitive and cluster tests.
+ */
+/*
 
 软件和硬件光栅化相关函数
 - RasterVertex 结构体 - 用于软件光栅化的顶点结构

@@ -1,3 +1,7 @@
+/*
+ * File: src/core/serialization.hpp
+ * Purpose: Small binary serialization helpers for cached scene and geometry data.
+ */
 #pragma once
 #include <cstdint>
 #include <cstring>

@@ -1,3 +1,7 @@
+/*
+ * File: src/meshlod/meshlod.h
+ * Purpose: Public mesh LOD build API and configuration entry points.
+ */
 #pragma once
 #include "meshlod_types.h"
 #include "meshlod_config.h"

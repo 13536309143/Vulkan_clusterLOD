@@ -1,3 +1,7 @@
+/*
+ * File: shaders/post/sky_background.frag.glsl
+ * Purpose: Fullscreen sky/background fragment shader.
+ */
 
 #version 460
 #extension GL_GOOGLE_include_directive : enable

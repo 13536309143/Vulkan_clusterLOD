@@ -1,3 +1,7 @@
+/*
+ * File: shaders/post/hierarchical_z.comp.glsl
+ * Purpose: Compute shader for building Hi-Z depth pyramid levels.
+ */
 #version 460
 // ------------------- 宏定义预设 -------------------
 // 这些宏通常由 C++ 端在编译 Shader 时动态注入，如果没有注入则使用这里的默认值

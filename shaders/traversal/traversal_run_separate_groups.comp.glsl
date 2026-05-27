@@ -1,3 +1,7 @@
+/*
+ * File: shaders/traversal/traversal_run_separate_groups.comp.glsl
+ * Purpose: Compute shader variant that processes separately queued traversal groups.
+ */
 #version 460
 
 #extension GL_GOOGLE_include_directive : enable

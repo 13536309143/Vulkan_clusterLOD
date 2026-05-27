@@ -1,3 +1,7 @@
+/*
+ * File: src/renderer/hierarchical_z.hpp
+ * Purpose: Hi-Z Vulkan helper interface for depth pyramid generation and descriptor updates.
+ */
 #pragma once
 #include <stdint.h>
 #include <string>

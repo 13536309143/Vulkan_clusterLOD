@@ -1,3 +1,7 @@
+/*
+ * File: shaders/streaming/streaming.glsl
+ * Purpose: Shared streaming shader helpers for load/unload request generation.
+ */
 void streamingAgeFilter(uint residentID, uint geometryID, Group_in groupRef, bool useBlasCaching)
 {
 #if STREAMING_DEBUG_ADDRESSES

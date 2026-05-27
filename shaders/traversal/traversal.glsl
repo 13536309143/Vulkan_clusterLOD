@@ -1,3 +1,7 @@
+/*
+ * File: shaders/traversal/traversal.glsl
+ * Purpose: Shared traversal helpers for LOD selection, error metrics, and task generation.
+ */
 #define FLT_MAX 3.402823466e+38f
 TraversalInfo unpackTraversalInfo(uint64_t packed64)
 {

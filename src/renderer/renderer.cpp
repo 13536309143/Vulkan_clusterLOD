@@ -1,3 +1,7 @@
+/*
+ * File: src/renderer/renderer.cpp
+ * Purpose: Shared renderer setup for scene upload, basic shaders, descriptors, and debug/fullscreen passes.
+ */
 //基类和通用接口
 #include <random>
 #include <vector>
@@ -95,8 +99,8 @@ bool Renderer::initBasicShaders(Resources& res, RenderScene& rscene, const Rende
   options.AddMacroDefinition("MESHSHADER_BBOX_COUNT", fmt::format("{}", m_meshShaderBoxes));
 
   res.compileShader(m_basicShaders.fullScreenVertexShader, VK_SHADER_STAGE_VERTEX_BIT, "post/fullscreen.vert.glsl");
-  res.compileShader(m_basicShaders.fullScreenBackgroundFragShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/fullscreen_background.frag.glsl");
-  res.compileShader(m_basicShaders.fullscreenAtomicRasterFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/fullscreen_atomic.frag.glsl");
+  res.compileShader(m_basicShaders.fullScreenBackgroundFragShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/sky_background.frag.glsl");
+  res.compileShader(m_basicShaders.fullscreenAtomicRasterFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/atomic_raster_resolve.frag.glsl");
   res.compileShader(m_basicShaders.renderInstanceBboxesMeshShader, VK_SHADER_STAGE_MESH_BIT_NV,"debug/render_instance_bbox.mesh.glsl", &options);
   res.compileShader(m_basicShaders.renderInstanceBboxesFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "debug/render_instance_bbox.frag.glsl");
   res.compileShader(m_basicShaders.renderClusterBboxesMeshShader, VK_SHADER_STAGE_MESH_BIT_NV,"debug/render_cluster_bbox.mesh.glsl", &options);

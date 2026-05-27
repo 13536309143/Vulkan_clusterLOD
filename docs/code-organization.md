@@ -29,5 +29,5 @@ added inside the existing module folders without changing the top-level build fi
 
 - `CMakeLists.txt` uses `GLOB_RECURSE` with `CONFIGURE_DEPENDS` for `src` and `shaders`.
 - C++ include directories are module-level, so includes stay short and independent of file locations.
-- Shader compilation paths include the shader module folder, for example `render/clusters.mesh.glsl`.
+- Shader compilation paths include the shader module folder, for example `render/cluster_mesh.mesh.glsl`.
 - Runtime shader include search paths include every shader subdirectory for both source-tree and install-tree layouts.

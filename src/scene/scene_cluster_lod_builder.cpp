@@ -1,3 +1,7 @@
+/*
+ * File: src/scene/scene_cluster_lod_builder.cpp
+ * Purpose: Builds clustered geometry and hierarchical LOD nodes from scene meshes.
+ */
 //核心算法部分。负责将原始网格（Mesh）切分成微小的集群，并利用第三方库 meshoptimizer 简化网格，构建出一套连续的 LOD 层级树。
 #include <glm/gtc/constants.hpp>
 #include <nvutils/logger.hpp>
