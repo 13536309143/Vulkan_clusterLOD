@@ -7,7 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/ext/scalar_constants.hpp>
 #include "renderer.hpp"
-#include "../shaders/shaderio.h"
+#include "shaderio.h"
 
 
 namespace lodclusters {
@@ -94,13 +94,13 @@ bool Renderer::initBasicShaders(Resources& res, RenderScene& rscene, const Rende
   options.AddMacroDefinition("MESHSHADER_WORKGROUP_SIZE", fmt::format("{}", m_meshShaderWorkgroupSize));
   options.AddMacroDefinition("MESHSHADER_BBOX_COUNT", fmt::format("{}", m_meshShaderBoxes));
 
-  res.compileShader(m_basicShaders.fullScreenVertexShader, VK_SHADER_STAGE_VERTEX_BIT, "fullscreen.vert.glsl");
-  res.compileShader(m_basicShaders.fullScreenBackgroundFragShader, VK_SHADER_STAGE_FRAGMENT_BIT, "fullscreen_background.frag.glsl");
-  res.compileShader(m_basicShaders.fullscreenAtomicRasterFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "fullscreen_atomic.frag.glsl");
-  res.compileShader(m_basicShaders.renderInstanceBboxesMeshShader, VK_SHADER_STAGE_MESH_BIT_NV,"render_instance_bbox.mesh.glsl", &options);
-  res.compileShader(m_basicShaders.renderInstanceBboxesFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "render_instance_bbox.frag.glsl");
-  res.compileShader(m_basicShaders.renderClusterBboxesMeshShader, VK_SHADER_STAGE_MESH_BIT_NV,"render_cluster_bbox.mesh.glsl", &options);
-  res.compileShader(m_basicShaders.renderClusterBboxesFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "render_cluster_bbox.frag.glsl");
+  res.compileShader(m_basicShaders.fullScreenVertexShader, VK_SHADER_STAGE_VERTEX_BIT, "post/fullscreen.vert.glsl");
+  res.compileShader(m_basicShaders.fullScreenBackgroundFragShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/fullscreen_background.frag.glsl");
+  res.compileShader(m_basicShaders.fullscreenAtomicRasterFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/fullscreen_atomic.frag.glsl");
+  res.compileShader(m_basicShaders.renderInstanceBboxesMeshShader, VK_SHADER_STAGE_MESH_BIT_NV,"debug/render_instance_bbox.mesh.glsl", &options);
+  res.compileShader(m_basicShaders.renderInstanceBboxesFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "debug/render_instance_bbox.frag.glsl");
+  res.compileShader(m_basicShaders.renderClusterBboxesMeshShader, VK_SHADER_STAGE_MESH_BIT_NV,"debug/render_cluster_bbox.mesh.glsl", &options);
+  res.compileShader(m_basicShaders.renderClusterBboxesFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "debug/render_cluster_bbox.frag.glsl");
   if(!res.verifyShaders(m_basicShaders))
   {
     return false;

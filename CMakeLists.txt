@@ -9,12 +9,31 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(NvproCore2 REQUIRED)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_CXX_STANDARD 20)
-file(GLOB SOURCE_FILES src/*.*)
-file(GLOB SHADER_FILES shaders/*.glsl shaders/*.h)
+file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+)
+file(GLOB_RECURSE SHADER_FILES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.glsl"
+  "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.inc"
+)
 file(GLOB VK_RADIX_SORT_FILES thirdparty/vulkan_radix_sort/src/vk_radix_sort.cc)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/vulkan_radix_sort/include)
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${SHADER_FILES} ${VK_RADIX_SORT_FILES})
+target_include_directories(${PROJECT_NAME} PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/app"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/meshlod"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/scene"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/streaming"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor"
+  "${CMAKE_CURRENT_SOURCE_DIR}/shaders/interface"
+  "${CMAKE_CURRENT_SOURCE_DIR}/shaders/common"
+  "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty"
+  "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/vulkan_radix_sort/include"
+)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE
   nvpro2::nvapp
@@ -25,8 +44,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
   meshoptimizer
   cgltf
 )
-source_group("Shader Files" FILES ${SHADER_FILES})
-source_group("Source Files" FILES ${SOURCE_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${SOURCE_FILES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "Shader Files" FILES ${SHADER_FILES})
 add_project_definitions(${PROJECT_NAME})
 copy_to_runtime_and_install( ${PROJECT_NAME}
     FILES ${DLSS_DLLS}

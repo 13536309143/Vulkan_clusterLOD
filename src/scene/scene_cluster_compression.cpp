@@ -5,7 +5,7 @@
 #include <meshoptimizer.h>
 #include "scene.hpp"
 // 引入 Shader 与 C++ 共享的顶点属性编码算法（如法线/切线的八面体映射压缩 normal_pack）
-#include "../shaders/attribute_encoding.h"
+#include "attribute_encoding.h"
 // 命名空间：专用于基础的数据压缩算法
 namespace compression {
 //=============================================================================

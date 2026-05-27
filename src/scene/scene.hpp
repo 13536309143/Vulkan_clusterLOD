@@ -12,7 +12,7 @@
 #include <nvutils/alignment.hpp>
 #include "serialization.hpp"
 #include "meshlod.h"
-#include "../shaders/shaderio_scene.h"
+#include "shaderio_scene.h"
 
 namespace lodclusters {
 

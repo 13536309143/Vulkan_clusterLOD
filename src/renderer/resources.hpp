@@ -23,7 +23,7 @@
 #error Update Vulkan SDK >= 1.4.309.0
 #endif
 #include "hiz.hpp"
-#include "../shaders/shaderio.h"
+#include "shaderio.h"
 
 namespace lodclusters {
 

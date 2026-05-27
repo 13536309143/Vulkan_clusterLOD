@@ -187,9 +187,25 @@ void Resources::init(VkDevice device, VkPhysicalDevice physicalDevice, VkInstanc
     const std::vector<std::filesystem::path> searchPaths      = {
         // regular build
         std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "interface"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "common"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "render"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "debug"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "post"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "streaming"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "traversal"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_SOURCE_DIRECTORY / "shaders" / "build"),
         std::filesystem::absolute(exeDirectoryPath / TARGET_EXE_TO_NVSHADERS_DIRECTORY),
         // install build
         std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "interface"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "common"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "render"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "debug"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "post"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "streaming"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "traversal"),
+        std::filesystem::absolute(exeDirectoryPath / TARGET_NAME "_files" / "shaders" / "build"),
         std::filesystem::absolute(exeDirectoryPath),
     };
     m_glslCompiler.addSearchPaths(searchPaths);
@@ -225,7 +241,7 @@ void Resources::init(VkDevice device, VkPhysicalDevice physicalDevice, VkInstanc
     {
       shaderc::CompileOptions options = makeCompilerOptions();
       m_hiz.appendShaderDefines(i, options);
-      compileShader(shaderResults[i], VK_SHADER_STAGE_COMPUTE_BIT, "hiz.comp.glsl", &options);
+      compileShader(shaderResults[i], VK_SHADER_STAGE_COMPUTE_BIT, "post/hiz.comp.glsl", &options);
     }
     m_hiz.initPipelines(shaderResults);
   }

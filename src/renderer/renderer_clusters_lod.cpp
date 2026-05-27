@@ -2,7 +2,7 @@
 #include <nvutils/alignment.hpp> // 引入 NVIDIA 工具库中的内存对齐工具
 #include <fmt/format.h> // 引入 fmt 库，用于高效的字符串格式化
 #include "renderer.hpp" // 引入渲染器基类定义
-#include "../shaders/shaderio.h" // 引入与着色器 (Shader) 交互的数据结构定义
+#include "shaderio.h" // 引入与着色器 (Shader) 交互的数据结构定义
 namespace lodclusters {
 // 定义名为 RendererRasterClustersLod 的类，继承自 Renderer 基类
 class RendererRasterClustersLod : public Renderer 
@@ -112,21 +112,21 @@ bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene,
   options.AddMacroDefinition("USE_FORCED_INVISIBLE_CULLING", "0"); // 强制隐藏面剔除 (此处写死为 0)
   
     // 开始编译所有的着色器文件，并传入上方的 options (预定义宏)
-    res.compileShader(m_shaders.graphicsMesh, VK_SHADER_STAGE_MESH_BIT_NV, "clusters.mesh.glsl", &options); // 编译 Mesh Shader
-    res.compileShader(m_shaders.graphicsFragment, VK_SHADER_STAGE_FRAGMENT_BIT, "frag.glsl", &options); // 编译 Fragment Shader
-    res.compileShader(m_shaders.computeTraversalPresort, VK_SHADER_STAGE_COMPUTE_BIT, "traversal_presort.comp.glsl", &options); // 预排序 Compute
-    res.compileShader(m_shaders.computeTraversalInit, VK_SHADER_STAGE_COMPUTE_BIT, "traversal_init.comp.glsl", &options); // 初始化 Compute
-    res.compileShader(m_shaders.computeTraversalRun, VK_SHADER_STAGE_COMPUTE_BIT, "traversal_run.comp.glsl", &options); // LOD 遍历 Compute
-    res.compileShader(m_shaders.computeBuildSetup, VK_SHADER_STAGE_COMPUTE_BIT, "build_setup.comp.glsl", &options); // 间接绘制参数设置 Compute
+    res.compileShader(m_shaders.graphicsMesh, VK_SHADER_STAGE_MESH_BIT_NV, "render/clusters.mesh.glsl", &options); // 编译 Mesh Shader
+    res.compileShader(m_shaders.graphicsFragment, VK_SHADER_STAGE_FRAGMENT_BIT, "render/frag.glsl", &options); // 编译 Fragment Shader
+    res.compileShader(m_shaders.computeTraversalPresort, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/traversal_presort.comp.glsl", &options); // 预排序 Compute
+    res.compileShader(m_shaders.computeTraversalInit, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/traversal_init.comp.glsl", &options); // 初始化 Compute
+    res.compileShader(m_shaders.computeTraversalRun, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/traversal_run.comp.glsl", &options); // LOD 遍历 Compute
+    res.compileShader(m_shaders.computeBuildSetup, VK_SHADER_STAGE_COMPUTE_BIT, "build/build_setup.comp.glsl", &options); // 间接绘制参数设置 Compute
     // 如果开启了软光栅，单独编译相应的软光栅 Compute Shader
   if(config.useComputeRaster)
   {
-    res.compileShader(m_shaders.computeRaster, VK_SHADER_STAGE_COMPUTE_BIT, "SWclusters.comp.glsl", &options);
+    res.compileShader(m_shaders.computeRaster, VK_SHADER_STAGE_COMPUTE_BIT, "render/SWclusters.comp.glsl", &options);
   }
   // 如果开启了分离遍历任务组，编译相关的 Compute Shader
   if(config.useSeparateGroups)
   {
-    res.compileShader(m_shaders.computeTraversalGroups, VK_SHADER_STAGE_COMPUTE_BIT,"traversal_run_separate_groups.comp.glsl", &options);
+    res.compileShader(m_shaders.computeTraversalGroups, VK_SHADER_STAGE_COMPUTE_BIT,"traversal/traversal_run_separate_groups.comp.glsl", &options);
   }
   // 验证所有 Shader 是否都编译成功
   return res.verifyShaders(m_shaders);
@@ -574,7 +574,7 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
     }
     // ===== HiZ (层级深度缓冲) 构建 =====
     // 为下一遍剔除或下一帧剔除生成 MipMap 深度图
-    //对应代码：shaders/hiz.comp.glsl。它通过 Subgroup 指令高效地对 Depth Texture 进行 Max/Min 规约，生成多个级别的 Mipmap。
+    //对应代码：shaders/post/hiz.comp.glsl。它通过 Subgroup 指令高效地对 Depth Texture 进行 Max/Min 规约，生成多个级别的 Mipmap。
     if(!frame.freezeCulling)// 冻结剔除功能时不更新 HiZ，方便 Debug 观察被剔除了什么
     {
       if(m_config.useTwoPassCulling)

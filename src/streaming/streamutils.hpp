@@ -6,7 +6,7 @@
 #include <nvvk/command_pools.hpp>
 #include "scene.hpp"
 #include "resources.hpp"
-#include "../shaders/shaderio_streaming.h"
+#include "shaderio_streaming.h"
 namespace lodclusters {
 
 static const uint32_t STREAMING_MAX_ACTIVE_TASKS = 3;
