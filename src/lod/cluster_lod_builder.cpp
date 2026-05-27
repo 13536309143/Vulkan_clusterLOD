@@ -3,8 +3,8 @@
 #include <nvutils/logger.hpp>
 #include <nvutils/parallel_work.hpp>
 #include <meshoptimizer.h>
-#include "scene.hpp"
-#include "../shaders/attribute_encoding.h"
+#include "scene/scene.hpp"
+#include "attribute_encoding.h"
 
 namespace lodclusters {
    // 辅助模板函数：用于在连续内存分配时，填充数组之间的空隙（补零对齐）

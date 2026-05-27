@@ -1,8 +1,8 @@
 #pragma once
-#include "meshlod_impl.h"
-#include "meshlod_bounds.h"
-#include "meshlod_clustering.h"
-#include "meshlod_simplify.h"
+#include "mesh_lod_impl.h"
+#include "mesh_lod_bounds.h"
+#include "mesh_lod_clustering.h"
+#include "mesh_lod_simplify.h"
 
 namespace clod
 {

@@ -1,6 +1,6 @@
 #pragma once
-#include "meshlod_types.h"
-#include "meshlod_config.h"
+#include "mesh_lod_types.h"
+#include "mesh_lod_config.h"
 
 #ifdef __cplusplus
 extern "C"

@@ -9,7 +9,7 @@
 #include <nvgui/sky.hpp>
 #include <volk.h>
 
-#include "lodclusters.hpp"
+#include "app/lod_clusters_app.hpp"
 
 bool g_verbose = false;
 

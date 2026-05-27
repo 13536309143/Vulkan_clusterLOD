@@ -1,12 +1,11 @@
 #pragma once
 
-#include "scene.hpp"
-#include "resources.hpp"
+#include "scene/scene.hpp"
+#include "gpu/resources.hpp"
 
 namespace lodclusters {
 
-// With this class we pre-load all lod levels of the rendered scene.
-// It is much more memory intensive.
+// Owns the fully resident GPU data for all cluster LOD levels.
 class ScenePreloaded
 {
 public:
@@ -16,23 +15,17 @@ public:
 
   static bool canPreload(VkDeviceSize, const Scene* scene);
 
-  // pointers must stay valid during lifetime
   bool init(Resources* res, const Scene* scene, const Config& config);
 
-
-
-  // tear down, safe to call without init
   void deinit();
 
-  // renderers need to access this buffer
   const nvvk::BufferTyped<shaderio::Geometry>& getShaderGeometriesBuffer() const { return m_shaderGeometriesBuffer; }
 
-  // device memory usage
   size_t getGeometrySize() const { return m_geometrySize; }
   size_t getOperationsSize() const { return m_operationsSize; }
 
 private:
-  struct Geometry
+  struct GeometryBuffers
   {
     nvvk::BufferTyped<shaderio::LodLevel> lodLevels;
     nvvk::BufferTyped<shaderio::Node>     lodNodes;
@@ -47,11 +40,11 @@ private:
   Resources*   m_resources = nullptr;
   const Scene* m_scene     = nullptr;
 
-  size_t m_geometrySize       = 0;
-  size_t m_operationsSize     = 0;
+  size_t m_geometrySize   = 0;
+  size_t m_operationsSize = 0;
 
-  std::vector<ScenePreloaded::Geometry> m_geometries;
-  std::vector<shaderio::Geometry>       m_shaderGeometries;
+  GeometryBuffers                 m_geometryBuffers;
+  std::vector<shaderio::Geometry> m_shaderGeometries;
 
   nvvk::BufferTyped<shaderio::Geometry> m_shaderGeometriesBuffer;
 };

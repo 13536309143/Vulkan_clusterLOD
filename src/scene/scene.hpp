@@ -15,8 +15,8 @@
 #include <glm/glm.hpp>
 #include <nvutils/timers.hpp>
 #include <nvutils/alignment.hpp>
-#include "meshlod.h"
-#include "../shaders/shaderio_scene.h"
+#include "lod/mesh_lod.h"
+#include "shaderio_scene.h"
 
 namespace lodclusters {
 

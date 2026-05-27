@@ -1,5 +1,5 @@
 #pragma once
-#include "meshlod_types.h"
+#include "mesh_lod_types.h"
 #include <cassert>
 
 size_t clodLocalIndices(unsigned int* vertices, unsigned char* triangles, const unsigned int* indices, size_t index_count)

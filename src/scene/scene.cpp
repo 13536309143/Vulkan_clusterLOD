@@ -10,7 +10,7 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/ext/scalar_constants.hpp>
-#include "scene.hpp"
+#include "scene/scene.hpp"
 namespace lodclusters {
 void Scene::ProcessingInfo::init(float processingThreadsPct)
 {

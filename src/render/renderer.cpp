@@ -6,8 +6,8 @@
 #include <glm/gtc/packing.hpp>
 #include <volk.h>
 
-#include "renderer.hpp"
-#include "../shaders/shaderio.h"
+#include "render/renderer.hpp"
+#include "shaderio.h"
 
 namespace lodclusters {
 

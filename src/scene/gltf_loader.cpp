@@ -13,7 +13,7 @@
 #include <nvutils/file_mapping.hpp>
 #include <nvutils/file_operations.hpp>
 #include <nvutils/parallel_work.hpp>
-#include "scene.hpp"
+#include "scene/scene.hpp"
 
 namespace {
 class SpinLock
@@ -351,12 +351,10 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
   m_geometryStorages.resize(geometryToMesh.size());
   m_geometryViews.resize(geometryToMesh.size());
 
-  constexpr size_t maxSimplifiedSceneGeometries = 8192;
-  if(geometryToMesh.size() > maxSimplifiedSceneGeometries)
+  if(geometryToMesh.size() > 8192)
   {
-    LOGE("Scene has %zu unique geometries; simplified build supports up to %zu without streaming/cache. Use a smaller scene.\n",
-         geometryToMesh.size(), maxSimplifiedSceneGeometries);
-    return SCENE_RESULT_ERROR;
+    LOGW("Scene has %zu unique geometries; loading may take a while in the simplified full-preload path.\n",
+         geometryToMesh.size());
   }
 
   beginProcessingOnly(geometryToMesh.size());

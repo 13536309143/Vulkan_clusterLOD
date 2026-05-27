@@ -37,7 +37,7 @@
 #include <nvapp/elem_sequencer.hpp>
 #include <nvutils/parameter_parser.hpp>
 
-#include "lodclusters.hpp"
+#include "app/lod_clusters_app.hpp"
 
 using namespace lodclusters;
 

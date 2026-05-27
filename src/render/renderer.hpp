@@ -5,9 +5,9 @@
 #include <memory>
 
 #include <nvvk/compute_pipeline.hpp>
-#include "resources.hpp"
-#include "scene.hpp"
-#include "preloaded.hpp"
+#include "gpu/resources.hpp"
+#include "scene/scene.hpp"
+#include "render/preloaded_scene.hpp"
 namespace lodclusters {
 
 class RenderScene

@@ -12,7 +12,7 @@
 #include <nvutils/parameter_parser.hpp>
 #include <nvutils/parameter_sequencer.hpp>
 
-#include "renderer.hpp"
+#include "render/renderer.hpp"
 
 namespace lodclusters {
 

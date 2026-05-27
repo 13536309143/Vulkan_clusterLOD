@@ -7,7 +7,7 @@
 #include <nvvk/formats.hpp>
 #include <volk.h>
 
-#include "resources.hpp"
+#include "gpu/resources.hpp"
 
 namespace lodclusters {
 
