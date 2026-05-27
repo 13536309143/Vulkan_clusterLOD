@@ -1,13 +1,8 @@
 /*
  * lodclusters.hpp
- * 
- * LOD Clusters主类定义，负责管理场景、渲染器和用户界面
- * 
- * 主要功能：
- * - 场景加载和管理
- * - 渲染器初始化和配置
- * - 用户界面管理
- * - 性能分析和统计
+ *
+ * Top-level application element. It owns scene loading, render-scene residency,
+ * renderer lifetime, frame configuration, and the ImGui control surface.
  */
 
 #pragma once
@@ -281,36 +276,37 @@ private:
   //   uint32_t  triangleCount = 0;
   //   uint32_t  clusterCount = 0;
   // } m_pickedInfo;
-  // use by-value copies for flexibility
+  // Scene loading, cache handling, and scene-dependent camera setup.
   void initScene(std::filesystem::path filePath, std::string cacheSuffix, bool configChange);
-
-  void setSceneCamera(const std::filesystem::path& filePath);
   void saveCacheFile();
   void deinitScene();
   void postInitNewScene();
-
-  void initRenderScene();
-  void deinitRenderScene();
-
-  void initRenderer(RendererType rtype);
-  void deinitRenderer();
-
-  void updateImguiImage();
-
+  void setSceneCamera(const std::filesystem::path& filePath);
   ClusterConfig findSceneClusterConfig(const SceneConfig& sceneConfig);
   void          setFromClusterConfig(SceneConfig& sceneConfig, ClusterConfig clusterConfig);
   void          updatedSceneGrid();
 
+  // Render-scene residency and renderer lifetime.
+  void initRenderScene();
+  void deinitRenderScene();
+  void initRenderer(RendererType rtype);
+  void deinitRenderer();
+
+  // Framebuffer/UI texture bridge.
+  void updateImguiImage();
+
+  // Runtime configuration reconciliation.
   void handleChanges();
   void applyCameraString();
   void resetSwRasterFeedback();
   void updateSwRasterFeedback();
 
+  // Viewport picking helpers.
   float decodePickingDepth(const shaderio::Readback& readback);
   bool  isPickingValid(const shaderio::Readback& readback);
 
+  // UI rendering.
   void viewportUI(ImVec2 corner);
-
   void loadingUI();
 
   template <typename T>

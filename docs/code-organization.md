@@ -6,15 +6,13 @@ added inside the existing module folders without changing the top-level build fi
 
 ## C++ Modules
 
-- `src/application`: application entry point, UI, and top-level `LodClusters` orchestration.
-- `src/io`: glTF import, processed-scene cache, and binary serialization helpers.
-- `src/scene`: scene data model, geometry storage, instances, materials, bounds, and scene-wide statistics.
-- `src/scene/processing`: scene processing algorithms that transform imported meshes into compressed clustered LOD data.
-- `src/lod/mesh`: standalone mesh LOD generation implementation and supporting headers.
-- `src/gpu`: Vulkan infrastructure, resource allocation, shader compilation, Hi-Z, and GPU scene upload helpers.
-- `src/rendering`: renderer-facing abstractions, shared draw setup, and the cluster LOD render path.
+- `src/app`: application entry point, UI, and top-level `LodClusters` orchestration.
+- `src/core`: processed-scene cache and binary serialization helpers.
+- `src/scene`: scene data model, glTF import, geometry storage, instances, materials, bounds, and scene processing.
+- `src/meshlod`: standalone mesh LOD generation implementation and supporting headers.
+- `src/renderer`: Vulkan resource management, shader compilation, Hi-Z, preloaded scene upload, renderer abstractions, and the cluster LOD render path.
 - `src/streaming`: streaming scene upload, resident data, request/update tasks, and allocator utilities.
-- `src/third_party`: single-file third-party integration units that are compiled with the target.
+- `src/vendor`: single-file third-party integration units that are compiled with the target.
 
 ## Shader Modules
 
@@ -34,8 +32,19 @@ added inside the existing module folders without changing the top-level build fi
 - Shader compilation paths include the shader module folder, for example `passes/cluster/cluster_mesh.mesh.glsl`.
 - Runtime shader include search paths include every shader subdirectory for both source-tree and install-tree layouts.
 
-## Implementation Split
+## Application Split
 
-- Application code is split into constructor/defaults, lifecycle/file loading, scene/render setup, runtime config changes, frame rendering, and UI.
-- GPU resource code is split into general resources/commands/shader compilation and framebuffer/Hi-Z render-target management.
+- `src/app/main.cpp`: process entry point, Vulkan context setup, application elements, command-line parsing, and docking layout.
+- `src/app/lodclusters.hpp`: `LodClusters` state, public application callbacks, and private helper declarations grouped by responsibility.
+- `src/app/lodclusters_config.cpp`: constructor, command-line parameter registration, and frame default initialization.
+- `src/app/lodclusters_scene.cpp`: model/config file loading, cache saving, processing-only mode, render-scene creation, cluster preset mapping, camera placement, and picking helpers.
+- `src/app/lodclusters_lifecycle.cpp`: framebuffer resize handling, ImGui viewport texture binding, renderer creation/destruction, attach/detach lifecycle, sequencer memory reports, and screenshot capture.
+- `src/app/lodclusters_runtime.cpp`: adaptive software-raster feedback, runtime config reconciliation, camera string application, and per-frame render dispatch.
+- `src/app/lodclusters_ui.cpp`: menus, settings windows, statistics windows, streaming memory plots, debug readback UI, and viewport image presentation.
+
+## Implementation Notes
+
+- `CMakeLists.txt` uses recursive source collection, so the application split does not require manual target updates.
+- Rendering command order is unchanged by the application split; the per-frame render path still enters through `LodClusters::onRender()` and then `Renderer::render()`.
+- Renderer code is split between shared renderer setup in `renderer.cpp`, the cluster LOD implementation in `renderer_clusters_lod.cpp`, framebuffer/resource ownership in `resources.cpp`, and Hi-Z management in `hiz.cpp`.
 - Streaming task code is split into request/residency bookkeeping and allocator/update/transfer task execution.
