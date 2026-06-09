@@ -185,6 +185,7 @@ void Renderer::initBasics(Resources& res, RenderScene& rscene, const RendererCon
     renderInstance.worldMatrix    = glm::mat4x3(sceneInstance.matrix);
     renderInstance.worldMatrixI   = glm::mat4x3(glm::inverse(sceneInstance.matrix));
     renderInstance.geometryID     = sceneInstance.geometryID;
+    renderInstance.assemblyID     = sceneInstance.assemblyID;
 
     renderInstance.materialID     = uint16_t(sceneInstance.materialID);
     renderInstance.maxLodLevelRcp = geometry.lodLevelsCount > 1 ? 1.0f / float(geometry.lodLevelsCount - 1) : 0.0f;

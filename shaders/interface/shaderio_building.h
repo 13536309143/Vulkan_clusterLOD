@@ -205,6 +205,8 @@ struct SceneBuilding
   uint numRenderInstances;
   uint maxRenderClusters;
   uint maxTraversalInfos;
+  uint numAssemblyNodes;
+  uint assemblyCullingMinInstances;
 
   float errorOverDistanceThreshold;
   float culledErrorScale;
@@ -263,6 +265,9 @@ struct SceneBuilding
 
 
   BUFFER_REF(uint8s_inout) instanceVisibility;
+
+
+  BUFFER_REF(AssemblyNodes_in) assemblyNodes;
 
 
   BUFFER_REF(uint32s_inout) instanceSortValues;

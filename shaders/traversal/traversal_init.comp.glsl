@@ -127,11 +127,37 @@ void main()
   vec4 clipMax;
   bool clipValid;
 
+  bool assemblyVisible = true;
+
+#if USE_CULLING && (TARGETS_RASTERIZATION || USE_FORCED_INVISIBLE_CULLING)
+  if (isValid && instance.assemblyID != SHADERIO_INVALID_ASSEMBLY && instance.assemblyID < build.numAssemblyNodes)
+  {
+    AssemblyNode assembly = build.assemblyNodes.d[instance.assemblyID];
+    mat4x3 worldIdentity = mat4x3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, 0.0));
+
+  #if USE_TWO_PASS_CULLING && TARGETS_RASTERIZATION
+    bool assemblyInFrustum = intersectFrustum(build.pass == 0 ? build.cullViewProjMatrixLast : build.cullViewProjMatrix, assembly.bbox.lo, assembly.bbox.hi, worldIdentity, clipMin, clipMax, clipValid);
+    assemblyVisible = assemblyInFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, build.pass)));
+
+    if (build.pass == 1 && assemblyVisible && clipValid && !intersectSize(clipMin, clipMax, 8.0) && ((uint(build.instanceVisibility.d[instanceLoad]) & INSTANCE_VISIBLE_BIT) != 0)) {
+      assemblyVisible = false;
+    }
+  #else
+    bool assemblyInFrustum = intersectFrustum(build.cullViewProjMatrixLast, assembly.bbox.lo, assembly.bbox.hi, worldIdentity, clipMin, clipMax, clipValid);
+    assemblyVisible = assemblyInFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, 0)));
+  #endif
+  }
+#endif
+
 #if USE_TWO_PASS_CULLING && TARGETS_RASTERIZATION
 
 
-  bool inFrustum = intersectFrustum( build.pass == 0 ? build.cullViewProjMatrixLast : build.cullViewProjMatrix, geometry.bbox.lo, geometry.bbox.hi, instance.worldMatrix, clipMin, clipMax, clipValid);
-  bool isVisible = inFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, build.pass)));
+  bool inFrustum = false;
+  bool isVisible = false;
+  if (assemblyVisible) {
+    inFrustum = intersectFrustum( build.pass == 0 ? build.cullViewProjMatrixLast : build.cullViewProjMatrix, geometry.bbox.lo, geometry.bbox.hi, instance.worldMatrix, clipMin, clipMax, clipValid);
+    isVisible = inFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, build.pass)));
+  }
 
 
   if (build.pass == 1 && isVisible && clipValid && !intersectSize(clipMin, clipMax, 8.0) && ((uint(build.instanceVisibility.d[instanceLoad]) & INSTANCE_VISIBLE_BIT) != 0)) {
@@ -141,8 +167,12 @@ void main()
 
 #else
 
-  bool inFrustum = intersectFrustum(build.cullViewProjMatrixLast, geometry.bbox.lo, geometry.bbox.hi, instance.worldMatrix, clipMin, clipMax, clipValid);
-  bool isVisible = inFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, 0)));
+  bool inFrustum = false;
+  bool isVisible = false;
+  if (assemblyVisible) {
+    inFrustum = intersectFrustum(build.cullViewProjMatrixLast, geometry.bbox.lo, geometry.bbox.hi, instance.worldMatrix, clipMin, clipMax, clipValid);
+    isVisible = inFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, 0)));
+  }
 #endif
 
   uint visibilityState = isVisible ? INSTANCE_VISIBLE_BIT : 0;

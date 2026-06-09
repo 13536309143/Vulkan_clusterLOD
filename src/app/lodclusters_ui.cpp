@@ -670,6 +670,10 @@ void LodClusters::onUIRender()
 
       if(PE::treeNode("Mesh error settings"))
       {
+        PE::InputIntClamped("Assembly min instances", (int*)&m_sceneConfigEdit.assemblyCullingMinInstances, 0, 1024, 1, 8,
+                            ImGuiInputTextFlags_EnterReturnsTrue,
+                            "Minimum number of render instances under a glTF node before it becomes an assembly culling node. 0 disables assembly culling.");
+
         PE::InputFloat("Error merge previous", &m_sceneConfigEdit.lodErrorMergePrevious, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "Mesh error propagation: scales previous lod error before combining it with the current error to compute the group error as max(previous_error * factor, error).");
 
         PE::InputFloat("Error merge additive", &m_sceneConfigEdit.lodErrorMergeAdditive, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "Mesh error propagation: adds scaled current error to the group error after the maximum computation.");

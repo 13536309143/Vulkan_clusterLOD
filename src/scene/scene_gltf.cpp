@@ -9,6 +9,7 @@
 // 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
 // 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <float.h>
+#include <algorithm>
 #include <unordered_map>
 #include <string>
 #include <array>
@@ -51,6 +52,62 @@ public:
 private:
   std::atomic_uint32_t& m_reference;
 };
+
+
+shaderio::BBox makeEmptyBBox()
+{
+  return {{FLT_MAX, FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX, -FLT_MAX}, 0.0f, 0.0f};
+}
+
+bool isValidBBox(const shaderio::BBox& bbox)
+{
+  return bbox.lo.x <= bbox.hi.x && bbox.lo.y <= bbox.hi.y && bbox.lo.z <= bbox.hi.z;
+}
+
+void updateBBoxEdges(shaderio::BBox& bbox)
+{
+  if(!isValidBBox(bbox))
+  {
+    bbox.shortestEdge = 0.0f;
+    bbox.longestEdge  = 0.0f;
+    return;
+  }
+
+  const glm::vec3 extent = bbox.hi - bbox.lo;
+  bbox.shortestEdge      = std::min(extent.x, std::min(extent.y, extent.z));
+  bbox.longestEdge       = std::max(extent.x, std::max(extent.y, extent.z));
+}
+
+void mergeBBox(shaderio::BBox& dst, const shaderio::BBox& src)
+{
+  if(!isValidBBox(src))
+  {
+    return;
+  }
+
+  dst.lo = glm::min(dst.lo, src.lo);
+  dst.hi = glm::max(dst.hi, src.hi);
+  updateBBoxEdges(dst);
+}
+
+shaderio::BBox transformBBox(const shaderio::BBox& bbox, const glm::mat4& matrix)
+{
+  shaderio::BBox result = makeEmptyBBox();
+
+  for(uint32_t v = 0; v < 8; v++)
+  {
+    const bool x = (v & 1) != 0;
+    const bool y = (v & 2) != 0;
+    const bool z = (v & 4) != 0;
+
+    const glm::vec3 corner = matrix * glm::vec4(glm::mix(bbox.lo, bbox.hi, glm::bvec3(x, y, z)), 1.0f);
+    result.lo             = glm::min(result.lo, corner);
+    result.hi             = glm::max(result.hi, corner);
+  }
+
+  updateBBoxEdges(result);
+  return result;
+}
 
 
 // 结构：FileMappingList。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
@@ -785,13 +842,18 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
 
   return SCENE_RESULT_SUCCESS;
 }
-void Scene::addInstancesFromNodeGLTF(const std::vector<size_t>& meshToGeometry,
-                                     const struct cgltf_data*   data,
-                                     const struct cgltf_node*   node,
-                                     const glm::mat4            parentObjToWorldTransform)
+Scene::GltfNodeImportResult Scene::addInstancesFromNodeGLTF(const std::vector<size_t>& meshToGeometry,
+                                                            const struct cgltf_data*   data,
+                                                            const struct cgltf_node*   node,
+                                                            const glm::mat4 parentObjToWorldTransform,
+                                                            uint32_t        depth)
 {
   if(node == nullptr)
-    return;
+    return {};
+
+  GltfNodeImportResult result{};
+  result.firstInstance = uint32_t(m_instances.size());
+  result.bbox          = makeEmptyBBox();
 
 
   // 函数：localNodeTransform。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
@@ -844,6 +906,7 @@ void Scene::addInstancesFromNodeGLTF(const std::vector<size_t>& meshToGeometry,
 
       instance.geometryID = uint32_t(meshToGeometry[meshIndex]);
       instance.matrix     = nodeObjToWorldTransform;
+      instance.bbox       = transformBBox(m_geometryViews[instance.geometryID].bbox, instance.matrix);
 
       m_geometryViews[instance.geometryID].instanceReferenceCount++;
 
@@ -854,6 +917,7 @@ void Scene::addInstancesFromNodeGLTF(const std::vector<size_t>& meshToGeometry,
 
 
       m_instances.push_back(instance);
+      mergeBBox(result.bbox, instance.bbox);
     }
   }
 
@@ -862,7 +926,40 @@ void Scene::addInstancesFromNodeGLTF(const std::vector<size_t>& meshToGeometry,
   for(size_t childIdx = 0; childIdx < numChildren; childIdx++)
   {
 
-    addInstancesFromNodeGLTF(meshToGeometry, data, node->children[childIdx], nodeObjToWorldTransform);
+    GltfNodeImportResult childResult =
+        addInstancesFromNodeGLTF(meshToGeometry, data, node->children[childIdx], nodeObjToWorldTransform, depth + 1);
+    mergeBBox(result.bbox, childResult.bbox);
+  }
+
+  result.instanceCount = uint32_t(m_instances.size()) - result.firstInstance;
+
+  if(m_config.assemblyCullingMinInstances > 0 && depth > 0 && numChildren > 0
+     && result.instanceCount >= m_config.assemblyCullingMinInstances && isValidBBox(result.bbox))
+  {
+    shaderio::AssemblyNode assembly{};
+    assembly.bbox          = result.bbox;
+    assembly.firstInstance = result.firstInstance;
+    assembly.instanceCount = result.instanceCount;
+    assembly.childCount    = uint32_t(numChildren);
+    assembly.depth         = depth;
+
+    const uint32_t assemblyID = uint32_t(m_assemblyNodes.size());
+    m_assemblyNodes.push_back(assembly);
+    assignAssemblyToRange(assemblyID, result.firstInstance, result.instanceCount);
+  }
+
+  return result;
+}
+
+void Scene::assignAssemblyToRange(uint32_t assemblyID, uint32_t firstInstance, uint32_t instanceCount)
+{
+  const size_t endInstance = std::min<size_t>(m_instances.size(), size_t(firstInstance) + size_t(instanceCount));
+  for(size_t instanceIndex = firstInstance; instanceIndex < endInstance; instanceIndex++)
+  {
+    if(m_instances[instanceIndex].assemblyID == SHADERIO_INVALID_ASSEMBLY)
+    {
+      m_instances[instanceIndex].assemblyID = assemblyID;
+    }
   }
 }
 

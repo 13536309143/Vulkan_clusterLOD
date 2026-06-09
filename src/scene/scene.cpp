@@ -10,6 +10,7 @@
 // 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <cinttypes>
 #include <cstring>
+#include <algorithm>
 #include <random>
 #include <meshoptimizer.h>
 #include <nvutils/logger.hpp>
@@ -25,6 +26,46 @@
 // 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
 // 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
+
+namespace {
+
+shaderio::BBox makeEmptyBBox()
+{
+  return {{FLT_MAX, FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX, -FLT_MAX}, 0.0f, 0.0f};
+}
+
+bool isValidBBox(const shaderio::BBox& bbox)
+{
+  return bbox.lo.x <= bbox.hi.x && bbox.lo.y <= bbox.hi.y && bbox.lo.z <= bbox.hi.z;
+}
+
+void updateBBoxEdges(shaderio::BBox& bbox)
+{
+  if(!isValidBBox(bbox))
+  {
+    bbox.shortestEdge = 0.0f;
+    bbox.longestEdge  = 0.0f;
+    return;
+  }
+
+  const glm::vec3 extent = bbox.hi - bbox.lo;
+  bbox.shortestEdge      = std::min(extent.x, std::min(extent.y, extent.z));
+  bbox.longestEdge       = std::max(extent.x, std::max(extent.y, extent.z));
+}
+
+void mergeBBox(shaderio::BBox& dst, const shaderio::BBox& src)
+{
+  if(!isValidBBox(src))
+  {
+    return;
+  }
+
+  dst.lo = glm::min(dst.lo, src.lo);
+  dst.hi = glm::max(dst.hi, src.hi);
+  updateBBoxEdges(dst);
+}
+
+}
 
 
 // 函数：Scene::ProcessingInfo::init。初始化本模块所需状态、资源或 GPU 侧绑定。
@@ -289,7 +330,9 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
   if(m_loadedFromCache)
   {
 
+    const uint32_t assemblyCullingMinInstances = m_config.assemblyCullingMinInstances;
     m_cacheFileView.getSceneConfig(m_config);
+    m_config.assemblyCullingMinInstances = assemblyCullingMinInstances;
 
     m_cacheFileView.getHistograms(m_histograms);
   }
@@ -357,6 +400,8 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
 
   LOGI("hi vertices: %" PRIu64 "\n", m_hiVerticesCount);
   LOGI("hi triangles/cluster: %.2f\n", double(m_hiTrianglesCount) / double(m_hiClustersCount));
+
+  LOGI("assembly nodes: %zu, min instances: %u\n", m_assemblyNodes.size(), m_config.assemblyCullingMinInstances);
 
   if(!m_loadedFromCache && m_loaderConfig.autoSaveCache)
   {
@@ -593,6 +638,15 @@ void Scene::updateSceneGrid(const SceneGridConfig& gridConfig)
 
   m_gridBbox = m_bbox;
 
+  if(copiesCount > 1 && !m_assemblyNodes.empty())
+  {
+    m_assemblyNodes.clear();
+    for(auto& instance : m_instances)
+    {
+      instance.assemblyID = SHADERIO_INVALID_ASSEMBLY;
+    }
+  }
+
   computeInstanceBBoxes();
 
   std::swap(m_gridBbox, m_bbox);
@@ -638,6 +692,20 @@ void Scene::computeInstanceBBoxes()
     m_bbox.lo = glm::min(m_bbox.lo, instance.bbox.lo);
 
     m_bbox.hi = glm::max(m_bbox.hi, instance.bbox.hi);
+  }
+
+  for(auto& assembly : m_assemblyNodes)
+  {
+    assembly.bbox             = makeEmptyBBox();
+    const size_t first        = std::min<size_t>(assembly.firstInstance, m_instances.size());
+    const size_t instanceEnd  = std::min<size_t>(m_instances.size(), size_t(assembly.firstInstance) + size_t(assembly.instanceCount));
+    assembly.firstInstance    = uint32_t(first);
+    assembly.instanceCount    = uint32_t(instanceEnd - first);
+
+    for(size_t instanceIndex = first; instanceIndex < instanceEnd; instanceIndex++)
+    {
+      mergeBBox(assembly.bbox, m_instances[instanceIndex].bbox);
+    }
   }
 }
 

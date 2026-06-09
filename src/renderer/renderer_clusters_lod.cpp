@@ -97,6 +97,7 @@ private:
   nvvk::Buffer m_sceneBuildBuffer;
   nvvk::Buffer m_sceneTraversalBuffer;
   nvvk::Buffer m_sceneDataBuffer;
+  nvvk::Buffer m_assemblyNodeBuffer;
   shaderio::SceneBuilding m_sceneBuildShaderio;
 };
 
@@ -249,6 +250,8 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
 
     memset(&m_sceneBuildShaderio, 0, sizeof(m_sceneBuildShaderio));
     m_sceneBuildShaderio.numRenderInstances = uint32_t(m_renderInstances.size());
+    m_sceneBuildShaderio.numAssemblyNodes   = uint32_t(rscene.scene->m_assemblyNodes.size());
+    m_sceneBuildShaderio.assemblyCullingMinInstances = rscene.scene->m_config.assemblyCullingMinInstances;
 
     m_sceneBuildShaderio.maxRenderClusters = uint32_t(1u << config.numRenderClusterBits);
 
@@ -260,6 +263,16 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     m_sceneBuildShaderio.indirectDrawClustersNV.first  = 0;
     m_sceneBuildShaderio.indirectDrawClustersSW.gridY  = 1;
     m_sceneBuildShaderio.indirectDrawClustersSW.gridZ  = 1;
+
+    if(m_sceneBuildShaderio.numAssemblyNodes)
+    {
+      const size_t assemblyBytes = sizeof(shaderio::AssemblyNode) * rscene.scene->m_assemblyNodes.size();
+      res.createBuffer(m_assemblyNodeBuffer, assemblyBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+      NVVK_DBG_NAME(m_assemblyNodeBuffer.buffer);
+      res.simpleUploadBuffer(m_assemblyNodeBuffer, const_cast<shaderio::AssemblyNode*>(rscene.scene->m_assemblyNodes.data()));
+      m_sceneBuildShaderio.assemblyNodes = m_assemblyNodeBuffer.address;
+      m_resourceReservedUsage.operationsMemBytes += logMemoryUsage(m_assemblyNodeBuffer.bufferSize, "operations", "assembly nodes");
+    }
 
     BufferRanges mem = {};
 
@@ -815,6 +828,8 @@ void RendererRasterClustersLod::deinit(Resources& res)
 
 
   res.m_allocator.destroyBuffer(m_sceneDataBuffer);
+
+  res.m_allocator.destroyBuffer(m_assemblyNodeBuffer);
 
   res.m_allocator.destroyBuffer(m_sceneBuildBuffer);
 

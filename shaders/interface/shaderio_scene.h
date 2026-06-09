@@ -114,6 +114,9 @@ enum ClusterAttributeBits
 #define SHADERIO_MAX_GROUP_CLUSTERS 128
 
 
+#define SHADERIO_INVALID_ASSEMBLY 0xffffffffu
+
+
 // 结构：BBox。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
 // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
 // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
@@ -135,6 +138,19 @@ BUFFER_REF_DECLARE(BBox_in, BBox, readonly, 16);
 // GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
 // 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
 BUFFER_REF_DECLARE_ARRAY(BBoxes_in, BBox, readonly, 16);
+
+
+struct AssemblyNode
+{
+  BBox     bbox;
+  uint32_t firstInstance;
+  uint32_t instanceCount;
+  uint32_t childCount;
+  uint32_t depth;
+};
+
+
+BUFFER_REF_DECLARE_ARRAY(AssemblyNodes_in, AssemblyNode, readonly, 16);
 
 
 // 结构：Cluster。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
@@ -445,7 +461,10 @@ struct RenderInstance
   uint8_t  twoSided;
   float    maxLodLevelRcp;
   uint32_t packedColor;
-  vec4 _pad;
+  uint32_t assemblyID;
+  uint32_t _pad0;
+  uint32_t _pad1;
+  uint32_t _pad2;
 };
 
 
