@@ -178,6 +178,9 @@
 #define TRAVERSAL_INIT_WORKGROUP 64
 
 
+#define ASSEMBLY_VISIBILITY_WORKGROUP 64
+
+
 // 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
 // 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define TRAVERSAL_RUN_WORKGROUP 64

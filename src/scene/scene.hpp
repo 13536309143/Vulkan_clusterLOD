@@ -17,6 +17,7 @@
 #include <atomic>
 #include <mutex>
 #include <unordered_set>
+#include <unordered_map>
 #include <functional>
 #include <glm/glm.hpp>
 #include <nvutils/file_mapping.hpp>
@@ -84,9 +85,10 @@ struct SceneConfig
 
 
   uint32_t assemblyCullingMinInstances = 8;
+  float    assemblyLodPixelThreshold   = 24.0f;
 
 
-  uint32_t reservedData[8] = {};
+  uint32_t reservedData[7] = {};
 
 
 };
@@ -535,6 +537,14 @@ public:
     shaderio::BBox bbox          = {};
   };
 
+  struct AssemblyTemplate
+  {
+    uint64_t fingerprint        = 0;
+    uint32_t firstAssembly      = SHADERIO_INVALID_ASSEMBLY;
+    uint32_t assemblyCount      = 0;
+    uint32_t instanceCount      = 0;
+  };
+
 
   // 结构：Camera。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
   // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
@@ -580,6 +590,7 @@ public:
 
   std::vector<Instance> m_instances;
   std::vector<shaderio::AssemblyNode> m_assemblyNodes;
+  std::vector<AssemblyTemplate>       m_assemblyTemplates;
   std::vector<Camera>   m_cameras;
 
   bool m_isBig       = false;
@@ -650,6 +661,7 @@ private:
 
   std::vector<GeometryStorage> m_geometryStorages;
   std::vector<GeometryView>    m_geometryViews;
+  std::unordered_map<uint64_t, uint32_t> m_assemblyTemplateMap;
 
 
   // 函数：loadCached。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。

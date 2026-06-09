@@ -128,26 +128,14 @@ void main()
   bool clipValid;
 
   bool assemblyVisible = true;
+  bool assemblyForceLowDetail = false;
 
-#if USE_CULLING && (TARGETS_RASTERIZATION || USE_FORCED_INVISIBLE_CULLING)
   if (isValid && instance.assemblyID != SHADERIO_INVALID_ASSEMBLY && instance.assemblyID < build.numAssemblyNodes)
   {
-    AssemblyNode assembly = build.assemblyNodes.d[instance.assemblyID];
-    mat4x3 worldIdentity = mat4x3(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, 0.0));
-
-  #if USE_TWO_PASS_CULLING && TARGETS_RASTERIZATION
-    bool assemblyInFrustum = intersectFrustum(build.pass == 0 ? build.cullViewProjMatrixLast : build.cullViewProjMatrix, assembly.bbox.lo, assembly.bbox.hi, worldIdentity, clipMin, clipMax, clipValid);
-    assemblyVisible = assemblyInFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, build.pass)));
-
-    if (build.pass == 1 && assemblyVisible && clipValid && !intersectSize(clipMin, clipMax, 8.0) && ((uint(build.instanceVisibility.d[instanceLoad]) & INSTANCE_VISIBLE_BIT) != 0)) {
-      assemblyVisible = false;
-    }
-  #else
-    bool assemblyInFrustum = intersectFrustum(build.cullViewProjMatrixLast, assembly.bbox.lo, assembly.bbox.hi, worldIdentity, clipMin, clipMax, clipValid);
-    assemblyVisible = assemblyInFrustum && (!clipValid || (intersectSize(clipMin, clipMax, 1.0) && intersectHiz(clipMin, clipMax, 0)));
-  #endif
+    AssemblyState assemblyState = build.assemblyStates.d[instance.assemblyID];
+    assemblyVisible = (assemblyState.flags & SHADERIO_ASSEMBLY_VISIBLE_BIT) != 0;
+    assemblyForceLowDetail = (assemblyState.flags & SHADERIO_ASSEMBLY_LOD_COARSE_BIT) != 0;
   }
-#endif
 
 #if USE_TWO_PASS_CULLING && TARGETS_RASTERIZATION
 
@@ -210,7 +198,7 @@ void main()
     mat4 transform = build.traversalViewMatrix * toMat4(worldMatrix);
 
 
-    if (!testForTraversal(mat4x3(transform), uniformScale, traversalMetric, errorScale))
+    if (assemblyForceLowDetail || !testForTraversal(mat4x3(transform), uniformScale, traversalMetric, errorScale))
     {
 
     #if TARGETS_RASTERIZATION

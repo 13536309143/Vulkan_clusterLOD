@@ -674,6 +674,10 @@ void LodClusters::onUIRender()
                             ImGuiInputTextFlags_EnterReturnsTrue,
                             "Minimum number of render instances under a glTF node before it becomes an assembly culling node. 0 disables assembly culling.");
 
+        PE::InputFloat("Assembly LOD pixels", &m_sceneConfigEdit.assemblyLodPixelThreshold, 0, 0, "%.2f",
+                       ImGuiInputTextFlags_EnterReturnsTrue,
+                       "Projected assembly bbox size below this pixel threshold forces instances in the assembly to low-detail clusters. 0 disables assembly-level LOD.");
+
         PE::InputFloat("Error merge previous", &m_sceneConfigEdit.lodErrorMergePrevious, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "Mesh error propagation: scales previous lod error before combining it with the current error to compute the group error as max(previous_error * factor, error).");
 
         PE::InputFloat("Error merge additive", &m_sceneConfigEdit.lodErrorMergeAdditive, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "Mesh error propagation: adds scaled current error to the group error after the maximum computation.");

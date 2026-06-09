@@ -67,6 +67,7 @@ private:
     shaderc::SpvCompilationResult graphicsMesh;
     shaderc::SpvCompilationResult graphicsFragment;
     shaderc::SpvCompilationResult computeTraversalPresort;
+    shaderc::SpvCompilationResult computeAssemblyVisibility;
     shaderc::SpvCompilationResult computeTraversalInit;
     shaderc::SpvCompilationResult computeTraversalRun;
     shaderc::SpvCompilationResult computeTraversalGroups;
@@ -83,6 +84,7 @@ private:
     VkPipeline graphicsMesh            = nullptr;
     VkPipeline graphicsBboxes          = nullptr;
     VkPipeline computeTraversalPresort = nullptr;
+    VkPipeline computeAssemblyVisibility = nullptr;
     VkPipeline computeTraversalInit    = nullptr;
     VkPipeline computeTraversalRun     = nullptr;
     VkPipeline computeTraversalGroups  = nullptr;
@@ -98,6 +100,7 @@ private:
   nvvk::Buffer m_sceneTraversalBuffer;
   nvvk::Buffer m_sceneDataBuffer;
   nvvk::Buffer m_assemblyNodeBuffer;
+  nvvk::Buffer m_assemblyStateBuffer;
   shaderio::SceneBuilding m_sceneBuildShaderio;
 };
 
@@ -192,6 +195,8 @@ bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene,
 
     res.compileShader(m_shaders.computeTraversalPresort, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/traversal_presort.comp.glsl", &options);
 
+    res.compileShader(m_shaders.computeAssemblyVisibility, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/assembly_visibility.comp.glsl", &options);
+
     res.compileShader(m_shaders.computeTraversalInit, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/traversal_init.comp.glsl", &options);
 
     res.compileShader(m_shaders.computeTraversalRun, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/traversal_run.comp.glsl", &options);
@@ -252,6 +257,7 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     m_sceneBuildShaderio.numRenderInstances = uint32_t(m_renderInstances.size());
     m_sceneBuildShaderio.numAssemblyNodes   = uint32_t(rscene.scene->m_assemblyNodes.size());
     m_sceneBuildShaderio.assemblyCullingMinInstances = rscene.scene->m_config.assemblyCullingMinInstances;
+    m_sceneBuildShaderio.assemblyLodPixelThreshold = rscene.scene->m_config.assemblyLodPixelThreshold;
 
     m_sceneBuildShaderio.maxRenderClusters = uint32_t(1u << config.numRenderClusterBits);
 
@@ -272,6 +278,12 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
       res.simpleUploadBuffer(m_assemblyNodeBuffer, const_cast<shaderio::AssemblyNode*>(rscene.scene->m_assemblyNodes.data()));
       m_sceneBuildShaderio.assemblyNodes = m_assemblyNodeBuffer.address;
       m_resourceReservedUsage.operationsMemBytes += logMemoryUsage(m_assemblyNodeBuffer.bufferSize, "operations", "assembly nodes");
+
+      const size_t assemblyStateBytes = sizeof(shaderio::AssemblyState) * rscene.scene->m_assemblyNodes.size();
+      res.createBuffer(m_assemblyStateBuffer, assemblyStateBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+      NVVK_DBG_NAME(m_assemblyStateBuffer.buffer);
+      m_sceneBuildShaderio.assemblyStates = m_assemblyStateBuffer.address;
+      m_resourceReservedUsage.operationsMemBytes += logMemoryUsage(m_assemblyStateBuffer.bufferSize, "operations", "assembly states");
     }
 
     BufferRanges mem = {};
@@ -447,6 +459,11 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     }
 
 
+    shaderInfo = nvvkglsl::GlslCompiler::makeShaderModuleCreateInfo(m_shaders.computeAssemblyVisibility);
+
+    vkCreateComputePipelines(res.m_device, nullptr, 1, &compInfo, nullptr, &m_pipelines.computeAssemblyVisibility);
+
+
     shaderInfo = nvvkglsl::GlslCompiler::makeShaderModuleCreateInfo(m_shaders.computeBuildSetup);
 
     vkCreateComputePipelines(res.m_device, nullptr, 1, &compInfo, nullptr, &m_pipelines.computeBuildSetup);
@@ -602,6 +619,17 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
       }
 
       vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, m_dsetPack.getSetPtr(), 0, nullptr);
+
+      if(m_sceneBuildShaderio.numAssemblyNodes)
+      {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelines.computeAssemblyVisibility);
+        res.cmdLinearDispatch(cmd, getWorkGroupCount(m_sceneBuildShaderio.numAssemblyNodes, ASSEMBLY_VISIBILITY_WORKGROUP));
+
+        memBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        memBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             VK_DEPENDENCY_BY_REGION_BIT, 1, &memBarrier, 0, nullptr, 0, nullptr);
+      }
 
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelines.computeTraversalInit);
       res.cmdLinearDispatch(cmd, getWorkGroupCount(m_sceneBuildShaderio.numRenderInstances, TRAVERSAL_INIT_WORKGROUP));
@@ -830,6 +858,8 @@ void RendererRasterClustersLod::deinit(Resources& res)
   res.m_allocator.destroyBuffer(m_sceneDataBuffer);
 
   res.m_allocator.destroyBuffer(m_assemblyNodeBuffer);
+
+  res.m_allocator.destroyBuffer(m_assemblyStateBuffer);
 
   res.m_allocator.destroyBuffer(m_sceneBuildBuffer);
 

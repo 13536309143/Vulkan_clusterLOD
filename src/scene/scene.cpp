@@ -331,8 +331,10 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
   {
 
     const uint32_t assemblyCullingMinInstances = m_config.assemblyCullingMinInstances;
+    const float    assemblyLodPixelThreshold   = m_config.assemblyLodPixelThreshold;
     m_cacheFileView.getSceneConfig(m_config);
     m_config.assemblyCullingMinInstances = assemblyCullingMinInstances;
+    m_config.assemblyLodPixelThreshold   = assemblyLodPixelThreshold;
 
     m_cacheFileView.getHistograms(m_histograms);
   }
@@ -401,7 +403,9 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
   LOGI("hi vertices: %" PRIu64 "\n", m_hiVerticesCount);
   LOGI("hi triangles/cluster: %.2f\n", double(m_hiTrianglesCount) / double(m_hiClustersCount));
 
-  LOGI("assembly nodes: %zu, min instances: %u\n", m_assemblyNodes.size(), m_config.assemblyCullingMinInstances);
+  LOGI("assembly nodes: %zu, templates: %zu, min instances: %u, lod pixels: %.2f\n",
+       m_assemblyNodes.size(), m_assemblyTemplates.size(), m_config.assemblyCullingMinInstances,
+       double(m_config.assemblyLodPixelThreshold));
 
   if(!m_loadedFromCache && m_loaderConfig.autoSaveCache)
   {
@@ -641,6 +645,8 @@ void Scene::updateSceneGrid(const SceneGridConfig& gridConfig)
   if(copiesCount > 1 && !m_assemblyNodes.empty())
   {
     m_assemblyNodes.clear();
+    m_assemblyTemplates.clear();
+    m_assemblyTemplateMap.clear();
     for(auto& instance : m_instances)
     {
       instance.assemblyID = SHADERIO_INVALID_ASSEMBLY;

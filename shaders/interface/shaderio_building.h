@@ -209,6 +209,7 @@ struct SceneBuilding
   uint assemblyCullingMinInstances;
 
   float errorOverDistanceThreshold;
+  float assemblyLodPixelThreshold;
   float culledErrorScale;
   float swRasterThreshold;
   float swRasterTriangleDensityThreshold;
@@ -268,6 +269,7 @@ struct SceneBuilding
 
 
   BUFFER_REF(AssemblyNodes_in) assemblyNodes;
+  BUFFER_REF(AssemblyStates_inout) assemblyStates;
 
 
   BUFFER_REF(uint32s_inout) instanceSortValues;

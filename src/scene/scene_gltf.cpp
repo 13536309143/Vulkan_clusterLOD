@@ -10,6 +10,7 @@
 // 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <float.h>
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 #include <string>
 #include <array>
@@ -107,6 +108,56 @@ shaderio::BBox transformBBox(const shaderio::BBox& bbox, const glm::mat4& matrix
 
   updateBBoxEdges(result);
   return result;
+}
+
+uint64_t hashCombine(uint64_t seed, uint64_t value)
+{
+  value ^= value >> 33;
+  value *= 0xff51afd7ed558ccdULL;
+  value ^= value >> 33;
+  value *= 0xc4ceb9fe1a85ec53ULL;
+  value ^= value >> 33;
+  return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+}
+
+uint64_t hashQuantizedFloat(uint64_t seed, float value)
+{
+  const int64_t quantized = int64_t(std::llround(double(value) * 100000.0));
+  return hashCombine(seed, uint64_t(quantized));
+}
+
+uint64_t computeAssemblyTemplateFingerprint(const std::vector<lodclusters::Scene::Instance>& instances,
+                                            uint32_t                                        firstInstance,
+                                            uint32_t                                        instanceCount,
+                                            const glm::mat4&                                nodeObjToWorldTransform,
+                                            uint32_t                                        childCount)
+{
+  uint64_t seed = 0x6a09e667f3bcc909ULL;
+  seed          = hashCombine(seed, childCount);
+  seed          = hashCombine(seed, instanceCount);
+
+  const glm::mat4 worldToNode = glm::inverse(nodeObjToWorldTransform);
+  const size_t    endInstance = std::min<size_t>(instances.size(), size_t(firstInstance) + size_t(instanceCount));
+
+  for(size_t instanceIndex = firstInstance; instanceIndex < endInstance; instanceIndex++)
+  {
+    const lodclusters::Scene::Instance& instance = instances[instanceIndex];
+    const glm::mat4                     local    = worldToNode * instance.matrix;
+
+    seed = hashCombine(seed, instance.geometryID);
+    seed = hashCombine(seed, instance.materialID);
+    seed = hashCombine(seed, instance.twoSided ? 1u : 0u);
+
+    for(uint32_t col = 0; col < 4; col++)
+    {
+      for(uint32_t row = 0; row < 4; row++)
+      {
+        seed = hashQuantizedFloat(seed, local[col][row]);
+      }
+    }
+  }
+
+  return seed;
 }
 
 
@@ -936,14 +987,41 @@ Scene::GltfNodeImportResult Scene::addInstancesFromNodeGLTF(const std::vector<si
   if(m_config.assemblyCullingMinInstances > 0 && depth > 0 && numChildren > 0
      && result.instanceCount >= m_config.assemblyCullingMinInstances && isValidBBox(result.bbox))
   {
+    const uint32_t assemblyID = uint32_t(m_assemblyNodes.size());
+    const uint64_t templateFingerprint =
+        computeAssemblyTemplateFingerprint(m_instances, result.firstInstance, result.instanceCount, nodeObjToWorldTransform, uint32_t(numChildren));
+
+    uint32_t templateID         = 0;
+    uint32_t templateInstanceID = 0;
+    auto     templateIt         = m_assemblyTemplateMap.find(templateFingerprint);
+    if(templateIt == m_assemblyTemplateMap.end())
+    {
+      templateID = uint32_t(m_assemblyTemplates.size());
+      m_assemblyTemplateMap.emplace(templateFingerprint, templateID);
+
+      AssemblyTemplate assemblyTemplate{};
+      assemblyTemplate.fingerprint   = templateFingerprint;
+      assemblyTemplate.firstAssembly = assemblyID;
+      assemblyTemplate.assemblyCount = 1;
+      assemblyTemplate.instanceCount = result.instanceCount;
+      m_assemblyTemplates.push_back(assemblyTemplate);
+    }
+    else
+    {
+      templateID         = templateIt->second;
+      templateInstanceID = m_assemblyTemplates[templateID].assemblyCount;
+      m_assemblyTemplates[templateID].assemblyCount++;
+    }
+
     shaderio::AssemblyNode assembly{};
     assembly.bbox          = result.bbox;
     assembly.firstInstance = result.firstInstance;
     assembly.instanceCount = result.instanceCount;
     assembly.childCount    = uint32_t(numChildren);
     assembly.depth         = depth;
+    assembly.templateID    = templateID;
+    assembly.templateInstanceID = templateInstanceID;
 
-    const uint32_t assemblyID = uint32_t(m_assemblyNodes.size());
     m_assemblyNodes.push_back(assembly);
     assignAssemblyToRange(assemblyID, result.firstInstance, result.instanceCount);
   }

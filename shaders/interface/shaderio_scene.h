@@ -117,6 +117,10 @@ enum ClusterAttributeBits
 #define SHADERIO_INVALID_ASSEMBLY 0xffffffffu
 
 
+#define SHADERIO_ASSEMBLY_VISIBLE_BIT 1u
+#define SHADERIO_ASSEMBLY_LOD_COARSE_BIT 2u
+
+
 // 结构：BBox。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
 // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
 // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
@@ -147,10 +151,25 @@ struct AssemblyNode
   uint32_t instanceCount;
   uint32_t childCount;
   uint32_t depth;
+  uint32_t templateID;
+  uint32_t templateInstanceID;
+  uint32_t _pad0;
 };
 
 
 BUFFER_REF_DECLARE_ARRAY(AssemblyNodes_in, AssemblyNode, readonly, 16);
+
+
+struct AssemblyState
+{
+  uint32_t flags;
+  float    screenPixels;
+  float    errorOverDistance;
+  uint32_t reserved;
+};
+
+
+BUFFER_REF_DECLARE_ARRAY(AssemblyStates_inout, AssemblyState, , 4);
 
 
 // 结构：Cluster。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
