@@ -59,13 +59,6 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"assemblylodpixels"}, &m_sceneConfig.assemblyLodPixelThreshold);
   m_info.parameterRegistry->add({"meshoptfillweight"}, &m_sceneConfig.meshoptFillWeight);
 
-
-  m_info.parameterRegistry->add({ "curvatureadaptive" }, &m_sceneConfig.curvatureAdaptiveStrength);
-  m_info.parameterRegistry->add({ "curvaturewindow" }, &m_sceneConfig.curvatureWindowRadius);
-  m_info.parameterRegistry->add({ "featureedge" }, &m_sceneConfig.featureEdgeThreshold);
-  m_info.parameterRegistry->add({ "perceptualweight" }, &m_sceneConfig.perceptualWeight);
-  m_info.parameterRegistry->add({ "silhouettepreserve" }, &m_sceneConfig.silhouettePreservation);
-
   m_info.parameterRegistry->add({"loderror"}, &m_frameConfig.lodPixelError);
   m_info.parameterRegistry->add({"shadowray"}, &m_frameConfig.frameConstants.doShadow);
   m_info.parameterRegistry->add({"maxtransfermegabytes"}, (uint32_t*)&m_streamingConfig.maxTransferMegaBytes);

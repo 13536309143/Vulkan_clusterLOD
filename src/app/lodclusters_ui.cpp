@@ -668,53 +668,6 @@ void LodClusters::onUIRender()
       }
 
 
-      if(PE::treeNode("Mesh error settings"))
-      {
-        PE::InputIntClamped("Assembly min instances", (int*)&m_sceneConfigEdit.assemblyCullingMinInstances, 0, 1024, 1, 8,
-                            ImGuiInputTextFlags_EnterReturnsTrue,
-                            "Minimum number of render instances under a glTF node before it becomes an assembly culling node. 0 disables assembly culling.");
-
-        PE::InputFloat("Assembly LOD pixels", &m_sceneConfigEdit.assemblyLodPixelThreshold, 0, 0, "%.2f",
-                       ImGuiInputTextFlags_EnterReturnsTrue,
-                       "Projected assembly bbox size below this pixel threshold forces instances in the assembly to low-detail clusters. 0 disables assembly-level LOD.");
-
-        PE::InputFloat("Error merge previous", &m_sceneConfigEdit.lodErrorMergePrevious, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "Mesh error propagation: scales previous lod error before combining it with the current error to compute the group error as max(previous_error * factor, error).");
-
-        PE::InputFloat("Error merge additive", &m_sceneConfigEdit.lodErrorMergeAdditive, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "Mesh error propagation: adds scaled current error to the group error after the maximum computation.");
-
-        PE::InputFloat("Normal weight", &m_sceneConfigEdit.simplifyNormalWeight, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "How much to weight this attribute for the error metric. 0 Disables");
-
-        PE::InputFloat("TexCoord weight", &m_sceneConfigEdit.simplifyTexCoordWeight, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "How much to weight this attribute for the error metric. 0 Disables");
-
-        PE::InputFloat("Tangent weight", &m_sceneConfigEdit.simplifyTangentWeight, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "How much to weight this attribute for the error metric. 0 Disables");
-
-        PE::InputFloat("BiTangent Sign weight", &m_sceneConfigEdit.simplifyTangentSignWeight, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue, "How much to weight this attribute for the error metric. 0 Disables");
-
-
-       PE::treePop();
-      }
-
-      if(PE::treeNode("Feature-aware simplification"))
-      {
-
-       PE::SliderFloat("Feature adaptive strength", &m_sceneConfigEdit.curvatureAdaptiveStrength, 0.0f, 1.0f, "%.3f", 0, "Controls how strongly high-importance CAD features reduce decimation.");
-
-       PE::SliderFloat("Curvature sensitivity", &m_sceneConfigEdit.curvatureWindowRadius, 0.0f, 5.0f, "%.2f", 0, "Sensitivity for normal-variation feature scoring.");
-
-       PE::SliderFloat("Sharp edge angle", &m_sceneConfigEdit.featureEdgeThreshold, 0.0f, 2.0f, "%.2f", 0, "Dihedral angle threshold in radians for sharp-edge detection.");
-
-       PE::SliderFloat("Perceptual weight", &m_sceneConfigEdit.perceptualWeight, 0.0f, 1.0f, "%.3f", 0, "Weight for perceptual error metric based on vertex count reduction.");
-
-       PE::SliderFloat("Boundary preservation", &m_sceneConfigEdit.silhouettePreservation, 0.0f, 1.0f, "%.3f", 0, "Controls protection of boundary, hole-loop, and non-manifold feature vertices.");
-
-
-        m_sceneConfigEdit.lodErrorMergePrevious = std::max(1.0f, m_sceneConfigEdit.lodErrorMergePrevious);
-
-        m_sceneConfigEdit.lodErrorMergeAdditive = std::max(0.0f, m_sceneConfigEdit.lodErrorMergeAdditive);
-
-        PE::treePop();
-      }
-
       bool hasChanges = memcmp(&m_sceneConfigEdit, &m_sceneConfig, sizeof(m_sceneConfigEdit)) != 0;
 
 
@@ -1447,32 +1400,6 @@ void LodClusters::onUIRender()
 
       if(ImGui::BeginChild("##BottomRightRuntimeScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar))
       {
-        if(m_scene && ImGui::CollapsingHeader("Feature Retention Summary", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-          const Scene::ProcessingStatsSnapshot& ps = m_scene->m_processingStats;
-          if(ps.featureInputVertices == 0)
-          {
-            ImGui::TextWrapped("No feature retention stats in this scene cache. Delete or rebuild the old cache once to generate the new cache header.");
-          }
-          else
-          {
-            const double featureVertices = double(std::max<uint64_t>(ps.featureInputVertices, 1));
-            auto pctFeature = [&](uint64_t value) { return 100.0 * double(value) / featureVertices; };
-            if(beginParamTable("##FeatureSummaryStats"))
-            {
-              rowFmt("Feature vertices", "{}", ps.featureInputVertices);
-              rowFmt("Protected vertices", "{} ({:.2f}%)", ps.featureProtectedVertices, pctFeature(ps.featureProtectedVertices));
-              rowFmt("Critical vertices", "{} ({:.2f}%)", ps.featureCriticalVertices, pctFeature(ps.featureCriticalVertices));
-              rowFmt("Circular hole vertices", "{} ({:.2f}%)", ps.featureCircularHoleVertices, pctFeature(ps.featureCircularHoleVertices));
-              rowFmt("Thin-wall vertices", "{} ({:.2f}%)", ps.featureThinWallVertices, pctFeature(ps.featureThinWallVertices));
-              rowFmt("Cylindrical vertices", "{} ({:.2f}%)", ps.featureCylindricalPatchVertices, pctFeature(ps.featureCylindricalPatchVertices));
-              rowFmt("Avg importance", "{:.4f}", double(ps.featureImportanceSumPpm) / featureVertices / 1000000.0);
-              rowFmt("Max importance", "{:.4f}", double(ps.featureImportanceMaxPpm) / 1000000.0);
-              ImGui::EndTable();
-            }
-          }
-        }
-
         if(ImGui::CollapsingHeader("Scene / Cache", ImGuiTreeNodeFlags_DefaultOpen))
         {
           if(beginParamTable("##SceneCacheParams"))
@@ -1516,18 +1443,6 @@ void LodClusters::onUIRender()
             rowFmt("Cluster group size", "{}", cfg.clusterGroupSize);
             rowFmt("LOD node width", "{}", cfg.preferredNodeWidth);
             rowFmt("LOD decimation", "{:.3f}", cfg.lodLevelDecimationFactor);
-            rowFmt("LOD merge previous", "{:.3f}", cfg.lodErrorMergePrevious);
-            rowFmt("LOD merge additive", "{:.3f}", cfg.lodErrorMergeAdditive);
-            rowFmt("LOD edge limit", "{:.3f}", cfg.lodErrorEdgeLimit);
-            rowFmt("Normal weight", "{:.3f}", cfg.simplifyNormalWeight);
-            rowFmt("Texcoord weight", "{:.3f}", cfg.simplifyTexCoordWeight);
-            rowFmt("Tangent weight", "{:.3f}", cfg.simplifyTangentWeight);
-            rowFmt("Tangent sign weight", "{:.3f}", cfg.simplifyTangentSignWeight);
-            rowFmt("Curvature adaptive", "{:.3f}", cfg.curvatureAdaptiveStrength);
-            rowFmt("Curvature window", "{:.3f}", cfg.curvatureWindowRadius);
-            rowFmt("Sharp edge angle", "{:.3f}", cfg.featureEdgeThreshold);
-            rowFmt("Perceptual weight", "{:.3f}", cfg.perceptualWeight);
-            rowFmt("Silhouette preserve", "{:.3f}", cfg.silhouettePreservation);
             rowFmt("Assembly min instances", "{}", cfg.assemblyCullingMinInstances);
             rowFmt("Assembly LOD pixels", "{:.2f}", cfg.assemblyLodPixelThreshold);
             rowFmt("Meshopt fill weight", "{:.3f}", cfg.meshoptFillWeight);
@@ -1607,33 +1522,6 @@ void LodClusters::onUIRender()
             rowFmt("Vertex tex bytes", "{}", formatMemorySize(size_t(ps.vertexTexCoordBytes)));
             rowFmt("Vertex normal/tangent bytes", "{}", formatMemorySize(size_t(ps.vertexNrmBytes)));
             rowFmt("Vertex compressed bytes", "{}", formatMemorySize(size_t(ps.vertexCompressedBytes)));
-            ImGui::EndTable();
-          }
-        }
-
-        if(m_scene && ImGui::CollapsingHeader("Feature Retention Output", ImGuiTreeNodeFlags_DefaultOpen))
-        {
-          const Scene::ProcessingStatsSnapshot& ps = m_scene->m_processingStats;
-          const double featureVertices = double(std::max<uint64_t>(ps.featureInputVertices, 1));
-          auto pctFeature = [&](uint64_t value) { return 100.0 * double(value) / featureVertices; };
-          if(beginParamTable("##FeatureOutputStats"))
-          {
-            rowFmt("Input feature vertices", "{}", ps.featureInputVertices);
-            rowFmt("Input feature tris", "{}", ps.featureInputTriangles);
-            rowFmt("Boundary vertices", "{} ({:.2f}%)", ps.featureBoundaryVertices, pctFeature(ps.featureBoundaryVertices));
-            rowFmt("Non-manifold vertices", "{} ({:.2f}%)", ps.featureNonManifoldVertices, pctFeature(ps.featureNonManifoldVertices));
-            rowFmt("Sharp edge vertices", "{} ({:.2f}%)", ps.featureSharpVertices, pctFeature(ps.featureSharpVertices));
-            rowFmt("Boundary components", "{}", ps.featureBoundaryLoopComponents);
-            rowFmt("Sharp ring components", "{}", ps.featureSharpRingComponents);
-            rowFmt("Circular hole loops", "{}", ps.featureCircularHoleLoops);
-            rowFmt("Circular hole vertices", "{} ({:.2f}%)", ps.featureCircularHoleVertices, pctFeature(ps.featureCircularHoleVertices));
-            rowFmt("Functional boundaries", "{} ({:.2f}%)", ps.featureFunctionalBoundaryVertices, pctFeature(ps.featureFunctionalBoundaryVertices));
-            rowFmt("Cylindrical vertices", "{} ({:.2f}%)", ps.featureCylindricalPatchVertices, pctFeature(ps.featureCylindricalPatchVertices));
-            rowFmt("Thin-wall vertices", "{} ({:.2f}%)", ps.featureThinWallVertices, pctFeature(ps.featureThinWallVertices));
-            rowFmt("Protected vertices", "{} ({:.2f}%)", ps.featureProtectedVertices, pctFeature(ps.featureProtectedVertices));
-            rowFmt("Critical vertices", "{} ({:.2f}%)", ps.featureCriticalVertices, pctFeature(ps.featureCriticalVertices));
-            rowFmt("Avg importance", "{:.4f}", ps.featureInputVertices ? double(ps.featureImportanceSumPpm) / double(ps.featureInputVertices) / 1000000.0 : 0.0);
-            rowFmt("Max importance", "{:.4f}", double(ps.featureImportanceMaxPpm) / 1000000.0);
             ImGui::EndTable();
           }
         }

@@ -38,7 +38,7 @@ namespace lodclusters {
 // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct SceneConfig
 {
-  static const uint32_t version = 5;
+  static const uint32_t version = 6;
 
 
   uint32_t clusterVertices    = 128;
@@ -70,13 +70,6 @@ struct SceneConfig
   float simplifyTexCoordWeight    = 0;
 
 
-  float curvatureAdaptiveStrength = 0.3f;
-  float curvatureWindowRadius = 0.5f;
-  float featureEdgeThreshold = 0.5f;
-  float perceptualWeight = 0.15f;
-  float silhouettePreservation = 0.2f;
-
-
   uint32_t compressionPosDropBits = 7;
   uint32_t compressionTexDropBits = 7;
 
@@ -88,7 +81,7 @@ struct SceneConfig
   float    assemblyLodPixelThreshold   = 24.0f;//
 
 
-  uint32_t reservedData[7] = {};
+  uint32_t reservedData[12] = {};
 
 
 };
@@ -597,22 +590,6 @@ public:
     uint64_t clusterHeaderBytes    = 0;
     uint64_t clusterGenBytes       = 0;
 
-    uint64_t featureInputVertices              = 0;
-    uint64_t featureInputTriangles             = 0;
-    uint64_t featureBoundaryVertices           = 0;
-    uint64_t featureNonManifoldVertices        = 0;
-    uint64_t featureSharpVertices              = 0;
-    uint64_t featureBoundaryLoopComponents     = 0;
-    uint64_t featureSharpRingComponents        = 0;
-    uint64_t featureCircularHoleLoops          = 0;
-    uint64_t featureCircularHoleVertices       = 0;
-    uint64_t featureFunctionalBoundaryVertices = 0;
-    uint64_t featureCylindricalPatchVertices   = 0;
-    uint64_t featureThinWallVertices           = 0;
-    uint64_t featureProtectedVertices          = 0;
-    uint64_t featureCriticalVertices           = 0;
-    uint64_t featureImportanceSumPpm           = 0;
-    uint64_t featureImportanceMaxPpm           = 0;
   };
 
 
@@ -779,7 +756,7 @@ private:
     struct Header
     {
       uint64_t magic               = 0x006f65676e73766eULL;
-      uint32_t geoVersion          = 9;
+      uint32_t geoVersion          = 11;
       uint32_t geoStructSize       = uint32_t(sizeof(GeometryView));
       uint32_t configVersion       = SceneConfig::version;
       uint32_t configStructSize    = uint32_t(sizeof(SceneConfig));
@@ -947,22 +924,6 @@ private:
       std::atomic_uint64_t clusterBboxBytes      = 0;
       std::atomic_uint64_t clusterHeaderBytes    = 0;
       std::atomic_uint64_t clusterGenBytes       = 0;
-      std::atomic_uint64_t featureInputVertices          = 0;
-      std::atomic_uint64_t featureInputTriangles         = 0;
-      std::atomic_uint64_t featureBoundaryVertices       = 0;
-      std::atomic_uint64_t featureNonManifoldVertices    = 0;
-      std::atomic_uint64_t featureSharpVertices          = 0;
-      std::atomic_uint64_t featureBoundaryLoopComponents = 0;
-      std::atomic_uint64_t featureSharpRingComponents    = 0;
-      std::atomic_uint64_t featureCircularHoleLoops      = 0;
-      std::atomic_uint64_t featureCircularHoleVertices   = 0;
-      std::atomic_uint64_t featureFunctionalBoundaryVertices = 0;
-      std::atomic_uint64_t featureCylindricalPatchVertices   = 0;
-      std::atomic_uint64_t featureThinWallVertices           = 0;
-      std::atomic_uint64_t featureProtectedVertices          = 0;
-      std::atomic_uint64_t featureCriticalVertices           = 0;
-      std::atomic_uint64_t featureImportanceSumPpm           = 0;
-      std::atomic_uint64_t featureImportanceMaxPpm           = 0;
     } stats;
 
 

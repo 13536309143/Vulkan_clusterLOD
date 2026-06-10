@@ -201,7 +201,6 @@ cmake -S . -B build -DNVPROCORE2_DOWNLOAD=OFF
 - `--simplifynormalweight`：normal 在属性感知简化中的权重。
 - `--simplifytangentweight`：tangent 在属性感知简化中的权重。
 - `--simplifytangentsignweight`：tangent sign 在属性感知简化中的权重。
-- `--curvatureadaptive`、`--curvaturewindow`、`--featureedge`、`--perceptualweight`、`--silhouettepreserve`：feature-aware simplification 参数。
 
 cache 和预处理：
 

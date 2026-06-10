@@ -633,23 +633,6 @@ bool Scene::endProcessingOnly(ProcessingInfo& processingInfo, bool hadError)
   m_processingStats.clusterHeaderBytes    = uint64_t(processingInfo.stats.clusterHeaderBytes);
   m_processingStats.clusterGenBytes       = uint64_t(processingInfo.stats.clusterGenBytes);
 
-  m_processingStats.featureInputVertices              = uint64_t(processingInfo.stats.featureInputVertices);
-  m_processingStats.featureInputTriangles             = uint64_t(processingInfo.stats.featureInputTriangles);
-  m_processingStats.featureBoundaryVertices           = uint64_t(processingInfo.stats.featureBoundaryVertices);
-  m_processingStats.featureNonManifoldVertices        = uint64_t(processingInfo.stats.featureNonManifoldVertices);
-  m_processingStats.featureSharpVertices              = uint64_t(processingInfo.stats.featureSharpVertices);
-  m_processingStats.featureBoundaryLoopComponents     = uint64_t(processingInfo.stats.featureBoundaryLoopComponents);
-  m_processingStats.featureSharpRingComponents        = uint64_t(processingInfo.stats.featureSharpRingComponents);
-  m_processingStats.featureCircularHoleLoops          = uint64_t(processingInfo.stats.featureCircularHoleLoops);
-  m_processingStats.featureCircularHoleVertices       = uint64_t(processingInfo.stats.featureCircularHoleVertices);
-  m_processingStats.featureFunctionalBoundaryVertices = uint64_t(processingInfo.stats.featureFunctionalBoundaryVertices);
-  m_processingStats.featureCylindricalPatchVertices   = uint64_t(processingInfo.stats.featureCylindricalPatchVertices);
-  m_processingStats.featureThinWallVertices           = uint64_t(processingInfo.stats.featureThinWallVertices);
-  m_processingStats.featureProtectedVertices          = uint64_t(processingInfo.stats.featureProtectedVertices);
-  m_processingStats.featureCriticalVertices           = uint64_t(processingInfo.stats.featureCriticalVertices);
-  m_processingStats.featureImportanceSumPpm           = uint64_t(processingInfo.stats.featureImportanceSumPpm);
-  m_processingStats.featureImportanceMaxPpm           = uint64_t(processingInfo.stats.featureImportanceMaxPpm);
-
   if(!hadError)
   {
     fwrite(m_processingOnlyGeometryOffsets.data(), m_processingOnlyGeometryOffsets.size() * sizeof(uint64_t), 1, m_processingOnlyFile);

@@ -34,7 +34,6 @@ struct Cluster
 	std::vector<unsigned int> indices;
 	int group;
 	int refined;
-	float feature_importance = 0.f;
 	clodBounds bounds;
 };
 
@@ -59,7 +58,6 @@ struct IterationContext
 	clodOutput output_callback = nullptr;
 	std::vector<unsigned char> locks;
 	std::vector<unsigned int>  remap;
-	std::vector<float> feature_importance;
 
 	int depth = 0;
 	std::vector<Cluster> clusters;
@@ -86,7 +84,7 @@ clodBounds boundsMerge(const std::vector<Cluster>& clusters, const std::vector<i
 // 函数：clusterize。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
 // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-std::vector<Cluster> clusterize(const clodConfig& config, const clodMesh& mesh, const unsigned int* indices, size_t index_count, const std::vector<float>* feature_importance);
+std::vector<Cluster> clusterize(const clodConfig& config, const clodMesh& mesh, const unsigned int* indices, size_t index_count);
 
 
 // 函数：partition。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
@@ -101,18 +99,6 @@ std::vector<std::vector<int> > partition(const clodConfig& config, const clodMes
 void lockBoundary(std::vector<unsigned char>& locks, const std::vector<std::vector<int> >& groups, const std::vector<Cluster>& clusters, const std::vector<unsigned int>& remap, const unsigned char* vertex_lock);
 
 
-// 函数：computeFeatureImportance。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
-std::vector<float> computeFeatureImportance(const clodConfig& config, const clodMesh& mesh, const std::vector<unsigned int>& remap);
-
-
-// 函数：perceptualError。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-float perceptualError(float geometric_error, float vertex_count, float original_count);
-
-
 // 函数：simplifyFallback。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
 // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
@@ -122,7 +108,7 @@ void simplifyFallback(std::vector<unsigned int>& lod, const clodMesh& mesh, cons
 // 函数：simplify。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
 // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-std::vector<unsigned int> simplify(const clodConfig& config, const clodMesh& mesh, const std::vector<unsigned int>& indices, const std::vector<unsigned char>& locks, const std::vector<float>& feature_importance, size_t target_count, float* error);
+std::vector<unsigned int> simplify(const clodConfig& config, const clodMesh& mesh, const std::vector<unsigned int>& indices, const std::vector<unsigned char>& locks, size_t target_count, float* error);
 
 
 // 函数：outputGroup。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
