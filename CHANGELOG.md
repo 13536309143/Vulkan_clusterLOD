@@ -396,11 +396,137 @@ cmake --build build --config Release
 - `git diff --check` 未发现空白错误。
 - 仍存在既有 warning：`streamutils.cpp` 的 C4307 整型常量溢出警告。
 - 仍存在既有 post-build 提示：`pwsh.exe` 未找到。
+
+---
+
+## 四、右下角运行参数面板与特征保持率指标可视化
+
+### 日期
+
+2026-06-10
+
+### 变动代码
+
+- `src/app/lodclusters_ui.cpp`
+  - 新增右下角固定面板 `Runtime / Cache Parameters`。
+  - 在面板中显示场景文件、cache 文件、cache 是否存在、是否从 cache 加载、cache 大小、装配节点数、装配模板数等运行信息。
+  - 新增 `Scene Config`、`Runtime Renderer`、`Scene Output Stats`、`Cache Generation Output`、`Feature Retention Output`、`Streaming / Grid` 等折叠区。
+  - 新增置顶的 `Feature Retention Summary`，默认展开显示关键特征保持率指标，避免完整参数列表过长时用户需要向下滚动才能看到。
+  - 当当前 scene/cache 没有特征统计时，在 UI 中明确提示需要删除或重建旧 cache。
+
+- `src/scene/scene.hpp`
+  - 新增 `Scene::ProcessingStatsSnapshot`，用于把几何处理阶段输出到终端的统计数据保存为 Scene 可读取的快照。
+  - `Scene` 新增成员 `m_processingStats`，供 UI 读取。
+  - `CacheFileHeader` 新增 `processingStats` 字段。
+  - cache header 中新增 `processingStatsVersion` 和 `processingStatsStructSize`。
+  - cache `geoVersion` 从 `8` 升级到 `9`，使旧 cache 自动失效并重新生成，避免旧 cache 中缺少特征指标导致 UI 显示 0。
+  - `CacheFileView` 新增 `getProcessingStats(...)` 声明。
+  - `endProcessingOnly(...)` 接口增加 `ProcessingInfo&` 参数，用于大模型专用预处理保存路径回写最终统计。
+
+- `src/scene/scene.cpp`
+  - 在场景几何处理结束后，把 `ProcessingInfo::stats` 拷贝到 `m_processingStats`。
+  - 从 cache 加载 scene 时，通过 `CacheFileView::getProcessingStats(...)` 回读 cache header 中保存的统计快照。
+
+- `src/core/cache.cpp`
+  - 实现 `CacheFileView::getProcessingStats(...)`。
+  - 普通 `Scene::saveCache()` 保存 cache 时写入 `m_processingStats`。
+  - `beginProcessingOnly(...)` 写入 cache header 时预留并写入统计字段。
+  - `endProcessingOnly(...)` 在大模型 dedicated preprocess pass 结束时，将最终 `ProcessingInfo::stats` 写回 cache header。
+
+- `src/scene/scene_gltf.cpp`
+  - 调整 `endProcessingOnly(...)` 调用，传入 `processingInfo`，确保 preprocess-only cache 能保存最终特征保持率统计。
+
+### 变动位置
+
+- UI 显示层：
+  - 文件：`src/app/lodclusters_ui.cpp`
+  - 位置：`LodClusters::onUIRender()`
+  - 作用：在主视口右下角显示当前运行参数、cache 参数、场景统计、cache 生成统计和特征保持率指标。
+
+- 场景处理统计保存层：
+  - 文件：`src/scene/scene.cpp`
+  - 位置：`Scene::init(...)` 中几何处理完成后。
+  - 作用：把原本只打印到终端的 `ProcessingInfo::stats` 保存到 `Scene::m_processingStats`。
+
+- cache 持久化层：
+  - 文件：`src/scene/scene.hpp`、`src/core/cache.cpp`
+  - 位置：`CacheFileHeader`、`Scene::saveCache()`、`Scene::beginProcessingOnly(...)`、`Scene::endProcessingOnly(...)`、`CacheFileView::getProcessingStats(...)`
+  - 作用：让特征保持率和 cache 生成统计随 `.zippp` cache 一起保存，后续命中 cache 时仍能在 UI 显示。
+
+- 大模型 preprocess 路径：
+  - 文件：`src/scene/scene_gltf.cpp`、`src/core/cache.cpp`
+  - 位置：`loadGLTF(...)` 调用 `endProcessingOnly(...)` 的路径。
+  - 作用：修复大模型走 dedicated preprocess pass 时，cache header 先写入、最终统计后产生，导致统计无法进入 cache 的问题。
+
+### 实现原理
+
+此前 `Feature Retention Stats`、`Group Data Stats` 等数据主要通过 `ProcessingInfo::stats` 在几何处理结束时打印到终端。UI 想显示这些数据时，只能读取当前 Scene 对象中的运行时状态；如果模型直接命中旧 cache，几何处理不会重新执行，`ProcessingInfo::stats` 就没有有效数据，因此 UI 中的特征保持率会显示为 0 或看不到有效指标。
+
+本次更新把统计数据从“临时终端输出”升级为“Scene 运行时快照 + cache header 持久化字段”：
+
+1. 几何处理阶段继续累积 `ProcessingInfo::stats`。
+2. `Scene::init(...)` 在处理完成后把统计值复制到 `m_processingStats`。
+3. UI 从 `m_processingStats` 读取并显示，不再依赖终端日志。
+4. 保存 `.zippp` cache 时，把 `m_processingStats` 写入 `CacheFileHeader`。
+5. 后续加载 cache 时，从 `CacheFileHeader` 回读 `processingStats`。
+6. 对大模型 dedicated preprocess pass，在 `endProcessingOnly(...)` 结束阶段回写最终统计，保证大模型 cache 也能保存完整指标。
+7. cache `geoVersion` 升级到 `9`，旧 cache 会自动失效并重建，避免旧 header 缺字段导致错误读取。
+
+UI 侧额外增加 `Feature Retention Summary`，把最关键的指标放在面板顶部，包括：
+
+- feature vertices
+- protected vertices
+- critical vertices
+- circular hole vertices
+- thin-wall vertices
+- cylindrical vertices
+- average importance
+- max importance
+
+完整指标仍保留在 `Feature Retention Output` 中，便于继续查看 boundary、non-manifold、sharp ring、hole loop 等详细统计。
+
+### 影响
+
+- 右下角 UI 可以直接看到运行参数、cache 参数、生成统计和特征保持率指标，不需要回看终端输出。
+- 特征保持率指标在新 cache 中可持久保存，后续命中 cache 加载时仍然可见。
+- 旧 `.zippp` cache 会因为 cache 版本升级自动失效并重新生成一次。
+- cache header 增加一份统计快照，体积增量很小，相比几何数据可以忽略。
+- 不改变 cluster 数据主体、LOD 构建算法和 shader traversal 逻辑。
+- 大模型 preprocess-only 保存路径也能保存最终统计，避免大型工业模型加载后 UI 缺少特征指标。
+
+### 建议验证方式
+
+1. 删除或让旧 cache 自动失效后加载模型，例如：
+
+```powershell
+.\_bin\Release\t1.exe --scene E:\vk_lod_clusters1\1\_downloaded_resources\c.glb
+```
+
+2. 首次加载时观察终端应重新生成 cache，并输出 `Feature Retention Stats`。
+3. 进入 UI 右下角 `Runtime / Cache Parameters`，确认顶部 `Feature Retention Summary` 显示非 0 数据。
+4. 关闭程序后再次加载同一模型，确认命中 cache 时 `Feature Retention Summary` 仍然显示非 0 数据。
+5. 对大模型使用 dedicated preprocess pass 验证，例如 `a.glb` 或其他超大工业模型，确认 `Scene::endProcessOnlySave completed successfully` 后再次加载 cache 仍能显示特征指标。
+6. 对比终端输出与 UI 中 `Cache Generation Output`、`Feature Retention Output` 的数值是否一致。
+
+### 构建验证
+
+已完成 Release 构建：
+
+```powershell
+cmake --build build --config Release
+```
+
+结果：
+
+- 成功生成：`_bin\Release\t1.exe`
+- `git diff --check -- src\app\lodclusters_ui.cpp src\scene\scene.hpp src\scene\scene.cpp src\scene\scene_gltf.cpp src\core\cache.cpp` 未发现空白错误。
+- 仍存在既有 warning：`src\streaming\streamutils.cpp` 的 C4307 整型常量溢出警告。
+- 仍存在既有 post-build 提示：`pwsh.exe` 未找到。
 - MSBuild 返回成功。
 
 ---
 
-## 四、修复特殊工业模型 LOD 构建容量估计不足导致的闪退
+## 五、修复特殊工业模型 LOD 构建容量估计不足导致的闪退
 
 ### 日期
 
@@ -553,3 +679,328 @@ cmake --build build --config Release
 - Release 构建成功。
 - `git diff --check -- src\meshlod\meshlod_build.h` 未发现空白错误。
 - 仍存在既有 post-build 提示：`pwsh.exe` 未找到。
+
+---
+
+## 六、工业结构化特征识别与误差约束
+
+### 日期
+
+2026-06-10
+
+### 变动代码
+
+- `src/meshlod/meshlod_types.h`
+  - 新增 `clodFeatureMetrics`，用于记录结构化特征识别结果。
+  - `clodMesh` 新增 `feature_metrics` 指针，使简化阶段能够把特征统计回传到场景处理层。
+  - 指标包括：
+    - 输入特征顶点数、输入特征三角形数
+    - boundary 顶点数
+    - non-manifold 顶点数
+    - sharp edge 顶点数
+    - boundary loop 组件数
+    - sharp ring 组件数
+    - circular hole loop 数
+    - circular hole 顶点数
+    - functional boundary 顶点数
+    - cylindrical patch 顶点数
+    - thin-wall 顶点数
+    - protected / critical 顶点数
+    - 平均和最大 feature importance
+
+- `src/meshlod/meshlod_simplify.h`
+  - 将原来偏“曲率/锐边启发式”的重要性估计，升级为多通道结构化特征识别。
+  - 新增 `detectFunctionalBoundaryLoops(...)`，用于从边界段和锐边段中提取 loop / ring 结构。
+  - 新增孔洞识别逻辑：
+    - 统计 loop 长度、闭合程度、中心、半径一致性和平面一致性。
+    - 对近圆形 boundary loop 和 sharp ring 赋予 `circular_hole` 权重。
+  - 新增装配功能区识别逻辑：
+    - 根据 boundary loop、sharp ring、局部尺度、法线变化和边界复杂度生成 `functional_boundary` 权重。
+    - 把孔边、装配接触边、结构开口边、功能轮廓边纳入保护。
+  - 新增圆柱/轴孔类区域识别逻辑：
+    - 根据法线切向分布、局部曲率、孔洞 loop 关系和环状锐边关系生成 `cylindrical_patch` 权重。
+  - 新增薄壁结构识别逻辑：
+    - 根据局部三角形尺度、细长三角形、边长各向异性和小尺度结构生成 `thin_wall` 权重。
+  - 新增结构化 `importance` 计算：
+    - `circular_hole`
+    - `functional_boundary`
+    - `cylindrical_patch`
+    - `thin_wall`
+    - `sharp edge`
+    - `boundary`
+    - `non-manifold`
+  - 对孔洞和高功能边界增加更强的 hard protection。
+  - 在边 collapse / 误差评估中引入语义特征强度，使涉及孔洞、圆柱、功能边界和薄壁区域的简化代价更高。
+  - 生成 `protected` 和 `critical` 两级特征顶点集合，支持后续分析特征保护强度是否过高。
+
+- `src/scene/clusterlod.cpp`
+  - 在每个 geometry 调用 LOD 简化时创建 `clodFeatureMetrics`。
+  - 将 `inputMesh.feature_metrics` 指向该统计结构。
+  - 简化完成后，把每个 geometry 的特征指标累加到 `ProcessingInfo::stats`。
+
+- `src/scene/scene.hpp`
+  - `ProcessingInfo::Stats` 新增结构化特征统计字段。
+  - 新增 `featureImportanceSumPpm` 和 `featureImportanceMaxPpm`，避免并行累积浮点数时产生非确定性。
+
+- `src/scene/scene.cpp`
+  - `ProcessingInfo::logEnd()` 新增 `Feature Retention Stats` 输出。
+  - 输出孔洞、圆柱、薄壁、功能边界、protected、critical 和 importance 等指标。
+
+### 变动位置
+
+- 核心算法位置：
+  - 文件：`src/meshlod/meshlod_simplify.h`
+  - 阶段：mesh LOD simplify 前的特征分析、collapse 权重构造、语义误差约束。
+
+- 数据结构位置：
+  - 文件：`src/meshlod/meshlod_types.h`
+  - 阶段：`clodMesh` 输入结构和简化统计回传接口。
+
+- 场景统计汇总位置：
+  - 文件：`src/scene/clusterlod.cpp`
+  - 阶段：每个 geometry 完成 LOD 生成后，把局部特征统计累加到全局处理统计。
+
+- 终端输出位置：
+  - 文件：`src/scene/scene.cpp`
+  - 阶段：geometry load & processing 结束时输出 `Feature Retention Stats`。
+
+### 实现原理
+
+原来的特征保护主要依赖曲率、锐边和边界这类低层几何启发式。它能够保留一部分高曲率边和明显锐边，但对工业模型中真正重要的结构语义不够敏感。例如：
+
+- 小孔和轴孔在低 LOD 下可能被错误合并。
+- 薄壁、板件和壳体边缘可能被简化成不合理形状。
+- 圆柱、管孔、螺栓孔等功能面容易被普通曲率误差低估。
+- 装配接触边、开口边和功能边界无法和普通倒角边区分。
+
+本次更新把特征识别从单一启发式升级为多通道结构化判断：
+
+1. 构建边邻接和顶点邻接关系。
+2. 从 boundary edge 和 sharp edge 中提取连续段。
+3. 对连续段进行 loop / ring 分析。
+4. 对 loop 估计中心、半径、闭合程度、半径方差和平面一致性。
+5. 如果 loop 近似圆形，则标记为 circular hole。
+6. 对 boundary loop、sharp ring 和孔洞周边赋予 functional boundary 权重。
+7. 结合法线变化、局部尺度和环状结构估计 cylindrical patch。
+8. 根据局部三角形尺度、细长性、边长各向异性和小尺度连接关系估计 thin-wall。
+9. 将多通道特征合成为 feature importance。
+10. 根据 importance 生成 protected / critical 顶点集合。
+11. 在 collapse 误差中提高涉及结构化特征的边的代价，降低孔洞、薄壁和功能边界被过度合并的概率。
+
+这样做的目标不是让所有锐边都绝对不变，而是让算法更接近工业模型的实际需求：
+
+- 孔洞和轴孔属于功能结构，应优先保护。
+- 薄壁结构代表真实制造形态，应防止低 LOD 过度坍缩。
+- 圆柱和管孔面应保持截面语义。
+- 装配功能区边界比普通装饰性锐边更重要。
+
+### 指标含义
+
+- `Circular hole loops`
+  - 识别出的圆形或近圆形孔洞 loop 数。
+  - 数值越高，说明模型中孔洞、轴孔、螺栓孔或环状功能边越多。
+
+- `Circular hole vertices`
+  - 被孔洞 loop 影响的顶点数。
+  - 该比例可以衡量孔洞结构在模型特征中的占比。
+
+- `Functional boundaries`
+  - 被认为具有装配、开口、接触、孔边或功能轮廓意义的边界顶点数。
+  - 高比例通常出现在机械板件、装配面、壳体开口和复杂支架中。
+
+- `Cylindrical vertices`
+  - 被识别为圆柱、轴孔、管面或近似圆柱 patch 的顶点数。
+  - 如果孔洞很多但该值为 0，通常说明模型只暴露孔边 loop，缺少连续圆柱侧壁，或者圆柱检测阈值偏严格。
+
+- `Thin-wall vertices`
+  - 薄壁、板件、壳体或小尺度细长结构相关顶点数。
+  - 该值过高时，说明模型简化空间较小，需要谨慎降低保护强度。
+
+- `Protected vertices`
+  - 当前策略认为应强保护的顶点。
+  - 如果达到 100%，说明保护过强，LOD 简化空间会明显下降。
+
+- `Critical vertices`
+  - 比 protected 更关键的高重要度顶点。
+  - 适合用于判断孔洞、功能区和高风险结构是否被过度保护或保护不足。
+
+- `Avg importance` / `Max importance`
+  - 特征重要性平均值和最大值。
+  - 如果平均值接近 1，说明模型中大部分 feature 都被判为高优先级，后续应考虑保护分级。
+
+### 影响
+
+- 对大型工业模型的结构保持更有针对性，尤其是孔洞、薄壁、轴孔、功能边界和装配区域。
+- 能解释为什么某些模型 LOD 效果不明显：如果 `Protected vertices` 或 `Avg importance` 过高，说明简化器被结构约束强烈限制。
+- 能解释为什么某些模型孔洞仍会消失：如果 `Circular hole vertices` 有值但低 LOD 仍丢孔，问题更可能在 collapse 约束强度或 LOD 选择策略，而不是识别阶段。
+- 会增加 CPU 预处理阶段的特征分析成本，但运行时 GPU traversal 不直接增加负担。
+- 对没有明显工业结构的普通模型，特征权重会更接近普通曲率/锐边逻辑。
+- 对拓扑干净、孔洞清晰的机械零件，特征识别更稳定。
+- 对保护比例极高的模型，可能降低简化率，需要后续引入保护分级和上限约束。
+
+### 建议验证方式
+
+1. 使用同一模型删除旧 cache 后重新生成，观察终端输出：
+
+```text
+Feature Retention Stats
+Circular Hole Loops
+Circular Hole Vertices
+Functional Boundaries
+Cylindrical Vertices
+Thin-Wall Vertices
+Protected Vertices
+Critical Vertices
+Avg Feature Importance
+Max Feature Importance
+```
+
+2. 使用右下角 UI 的 `Feature Retention Summary` 和 `Feature Retention Output` 对比不同模型：
+   - 小机械零件
+   - 多孔板件
+   - 大型装配模型
+   - 薄壁壳体模型
+   - 管线/圆柱结构模型
+
+3. 对同一模型做 A/B 测试：
+
+```powershell
+.\_bin\Release\t1.exe --scene E:\vk_lod_clusters1\1\_downloaded_resources\c.glb
+```
+
+对比指标：
+
+- `Circular hole loops`
+- `Circular hole vertices`
+- `Functional boundaries`
+- `Thin-wall vertices`
+- `Protected vertices`
+- `Critical vertices`
+- `Avg importance`
+- 低 LOD 下孔洞是否消失
+- 远距离模型是否仍有明显孔洞/薄壁坍缩
+- FPS 和 rendered clusters 是否发生明显变化
+
+4. 判断策略问题：
+   - 如果 `Circular hole vertices` 很高，但孔洞仍消失，说明识别有效，约束或 LOD 策略还需加强。
+   - 如果 `Protected vertices` 接近 100%，说明保护过强，后续应降低普通 sharp edge 权重，保留孔洞和功能区硬保护。
+   - 如果 `Circular hole loops` 很低，但模型肉眼有很多孔，说明孔洞 loop 检测阈值或拓扑输入需要继续优化。
+
+### 后续优化方向
+
+- 引入保护分级：
+  - 孔洞 loop：硬保护。
+  - 装配功能边界：强保护。
+  - 薄壁边界：强保护或厚度误差约束。
+  - 圆柱 patch：半径/轴向误差约束。
+  - 普通锐边：从硬保护降为误差加权。
+
+- 增加简化后保持率：
+  - 孔洞 loop 保留率。
+  - 圆孔半径误差。
+  - 孔中心漂移误差。
+  - 锐边长度保持率。
+  - 薄壁厚度误差。
+  - protected / critical 顶点 surviving ratio。
+
+- 增加保护上限策略：
+  - 当 `Protected vertices` 超过一定比例时，自动降低普通 sharp edge 权重。
+  - 保持孔洞和装配功能区优先级不变，释放重复倒角、小锐边和低风险边的简化空间。
+
+### 构建验证
+
+该算法更新已随当前 Release 版本完成构建验证：
+
+```powershell
+cmake --build build --config Release
+```
+
+结果：
+
+- 成功生成：`_bin\Release\t1.exe`
+- 仍存在既有 warning：`src\streaming\streamutils.cpp` 的 C4307 整型常量溢出警告。
+- 仍存在既有 post-build 提示：`pwsh.exe` 未找到。
+
+主要改 [src/meshlod/meshlod_simplify.h](E:/vk_lod_clusters1/t1/src/meshlod/meshlod_simplify.h:553)。保护过激一般不是一个开关造成的，而是三层叠加：
+
+1. `importance` 算得太高  
+2. 高 `importance` 被转成 hard lock  
+3. `featureAdaptiveTarget()` 自动把简化目标放宽，导致保留三角形太多
+
+我建议按这个顺序改。
+
+**优先改 1：降低普通锐边/功能边界保护**
+现在最容易过激的是这些位置：
+
+```cpp
+if (circular_hole[v] > 0.35f)
+  importance[v] = std::max(importance[v], clamp01(0.88f + circular_hole[v] * 0.12f));
+else if (functional_boundary[v] > 0.55f)
+  importance[v] = std::max(importance[v], clamp01(0.68f + functional_boundary[v] * 0.18f));
+
+if (cylindrical_patch[v] > 0.55f)
+  importance[v] = std::max(importance[v], clamp01(0.58f + cylindrical_patch[v] * 0.22f));
+```
+
+如果你觉得保护太强，先不要动孔洞，把功能边界和圆柱降一点：
+
+```cpp
+else if (functional_boundary[v] > 0.65f)
+  importance[v] = std::max(importance[v], clamp01(0.55f + functional_boundary[v] * 0.15f));
+
+if (cylindrical_patch[v] > 0.65f)
+  importance[v] = std::max(importance[v], clamp01(0.48f + cylindrical_patch[v] * 0.18f));
+```
+
+孔洞这段建议先保留，因为你之前主要担心孔洞消失。
+
+**优先改 2：提高 hard lock 阈值**
+在 [src/meshlod/meshlod_simplify.h](E:/vk_lod_clusters1/t1/src/meshlod/meshlod_simplify.h:785)：
+
+```cpp
+float lock_threshold = 0.9f - 0.25f * clamp01(config.silhouette_preservation);
+```
+
+如果 `silhouette_preservation = 1`，阈值会变成 `0.65`，这很激进。建议改成：
+
+```cpp
+float lock_threshold = 0.95f - 0.15f * clamp01(config.silhouette_preservation);
+```
+
+这样阈值范围从 `0.65-0.90` 变成 `0.80-0.95`，只有真正高重要度点才会 hard lock。
+
+**优先改 3：降低 adaptive target 的保守程度**
+在 [src/meshlod/meshlod_simplify.h](E:/vk_lod_clusters1/t1/src/meshlod/meshlod_simplify.h:766)：
+
+```cpp
+float pressure = clamp01(avg_feature * 0.45f + max_feature * 0.25f + critical_ratio * 0.22f + protected_ratio * 0.08f);
+```
+
+可以改成：
+
+```cpp
+float pressure = clamp01(avg_feature * 0.30f + max_feature * 0.15f + critical_ratio * 0.18f + protected_ratio * 0.04f);
+```
+
+再把下面这段：
+
+```cpp
+size_t critical_floor = target_count + size_t(float(indices.size() - target_count) * clamp01(0.35f + strength * (0.25f + critical_ratio)));
+```
+
+改成更温和：
+
+```cpp
+size_t critical_floor = target_count + size_t(float(indices.size() - target_count) * clamp01(0.20f + strength * (0.18f + critical_ratio * 0.5f)));
+```
+
+这会让高特征区域仍然保守，但不会一看到很多 protected/critical 就大幅减少简化。
+
+**最推荐的策略**
+别整体削弱孔洞。应该这样分级：
+
+- 孔洞 loop：继续强保护
+- 装配功能边界：中强保护
+- 薄壁：中等保护
+- 圆柱 patch：中等保护
+- 普通 sharp edge：从硬保护降成误差加权

@@ -571,12 +571,12 @@ std::vector<float> computeFeatureImportance(const clodConfig& config, const clod
 
 		importance[v] = std::max(importance[v], clamp01(weighted));
 
-		if (circular_hole[v] > 0.35f)
+		if (circular_hole[v] > 0.55f)
 			importance[v] = std::max(importance[v], clamp01(0.88f + circular_hole[v] * 0.12f));
-		else if (functional_boundary[v] > 0.55f)
+		else if (functional_boundary[v] > 0.75f)
 			importance[v] = std::max(importance[v], clamp01(0.68f + functional_boundary[v] * 0.18f));
 
-		if (cylindrical_patch[v] > 0.55f)
+		if (cylindrical_patch[v] > 0.75f)
 			importance[v] = std::max(importance[v], clamp01(0.58f + cylindrical_patch[v] * 0.22f));
 	}
 
@@ -763,14 +763,14 @@ static size_t featureAdaptiveTarget(const clodConfig& config, const std::vector<
 	float protected_ratio = indices.empty() ? 0.f : protected_count / float(indices.size());
 
 
-	float pressure = clamp01(avg_feature * 0.45f + max_feature * 0.25f + critical_ratio * 0.22f + protected_ratio * 0.08f);
+	float pressure = clamp01(avg_feature * 0.30f + max_feature * 0.15f + critical_ratio * 0.12f + protected_ratio * 0.04f);
 
 	float strength = clamp01(config.curvature_adaptive_strength + config.silhouette_preservation);
 	float preserve = 1.f - config.simplify_ratio;
 	size_t relaxed = target_count + size_t(float(indices.size() - target_count) * preserve * strength * pressure);
 	if (critical_count > 0.f)
 	{
-		size_t critical_floor = target_count + size_t(float(indices.size() - target_count) * clamp01(0.35f + strength * (0.25f + critical_ratio)));
+		size_t critical_floor = target_count + size_t(float(indices.size() - target_count) * clamp01(0.20f + strength * (0.18f + critical_ratio * 0.5f)));
 		relaxed = std::max(relaxed, critical_floor);
 	}
 	relaxed = (relaxed / 3) * 3;
@@ -788,7 +788,7 @@ static void applyFeatureLocks(const clodConfig& config, const std::vector<unsign
 		return;
 
 
-	float lock_threshold = 0.9f - 0.25f * clamp01(config.silhouette_preservation);
+	float lock_threshold = 0.95f - 0.15f * clamp01(config.silhouette_preservation);
 	for (size_t i = 0; i < indices.size(); ++i)
 	{
 		unsigned int v = indices[i];
