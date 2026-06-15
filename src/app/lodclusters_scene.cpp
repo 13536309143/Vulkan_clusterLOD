@@ -281,6 +281,21 @@ void LodClusters::doProcessingOnly()
   m_scene->init(m_sceneFilePathDropNew, m_sceneConfig, m_sceneLoaderConfig, m_sceneCacheSuffix, false);
 }
 
+void LodClusters::doCacheLoadOnly()
+{
+  setFromClusterConfig(m_sceneConfig, m_tweak.clusterConfig);
+
+  assert(m_app == nullptr);
+  m_scene = std::make_unique<Scene>();
+
+  SceneLoaderConfig loaderConfig = m_sceneLoaderConfig;
+  loaderConfig.processingOnly    = false;
+  loaderConfig.autoLoadCache     = true;
+  loaderConfig.autoSaveCache     = false;
+
+  m_scene->init(m_sceneFilePathDropNew, m_sceneConfig, loaderConfig, m_sceneCacheSuffix, false);
+}
+
 
 const LodClusters::ClusterInfo LodClusters::s_clusterInfos[NUM_CLUSTER_CONFIGS] = {
     {32, 32, CLUSTER_32T_32V}, {32, 64, CLUSTER_32T_64V}, {32, 96, CLUSTER_32T_96V}, {32, 128, CLUSTER_32T_128V}, {32, 160, CLUSTER_32T_160V}, {32, 192, CLUSTER_32T_192V}, {32, 224, CLUSTER_32T_224V}, {32, 256, CLUSTER_32T_256V},

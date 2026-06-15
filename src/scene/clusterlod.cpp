@@ -39,16 +39,17 @@ namespace lodclusters {
      }
    }
 
-   uint32_t Scene::storeGroup(TempContext* context,
-                              uint32_t           threadIndex,
-                              uint32_t           groupIndex,
-                              const clodGroup&   group,
-                              uint32_t           clusterCount,
-                              const clodCluster* clusters)
-   {
-       ProcessingInfo& processing = context->processingInfo;
-       GeometryStorage& geometry = context->geometry;
-       Scene::GroupInfo groupInfo = {};
+  uint32_t Scene::storeGroup(TempContext* context,
+                             uint32_t           threadIndex,
+                             uint32_t           groupIndex,
+                             const clodGroup&   group,
+                             uint32_t           clusterCount,
+                             const clodCluster* clusters)
+  {
+      const uint64_t quantCacheStart = ProcessingInfo::timestampMicroseconds();
+      ProcessingInfo& processing = context->processingInfo;
+      GeometryStorage& geometry = context->geometry;
+      Scene::GroupInfo groupInfo = {};
 
      uint32_t level = uint32_t(group.depth);
 
@@ -467,8 +468,9 @@ namespace lodclusters {
          padZeroes(groupStorage.vertices, (uint32_t*)(groupStorage.raw + groupInfo.sizeBytes));
        }
      }
+     ProcessingInfo::addMicroseconds(processing.quantCacheMicroseconds, quantCacheStart);
      return groupIndex;
-   }
+  }
 
 
    // 函数：Scene::clodIterationMeshoptimizer。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
@@ -550,6 +552,7 @@ namespace lodclusters {
      inputMesh.indices                 = reinterpret_cast<const uint32_t*>(geometry.triangles.data());
      clodFeatureMetrics featureMetrics = {};
      inputMesh.feature_metrics         = &featureMetrics;
+     inputMesh.timing_stats            = &processingInfo.lodTimingStats;
      float attributeWeights[9] = {};
 
      if(geometry.attributesWithWeights)

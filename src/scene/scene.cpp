@@ -129,6 +129,7 @@ void Scene::ProcessingInfo::logBegin(uint64_t totalTriangleCount)
 
 
   startTime = clock.getMicroseconds();
+  preprocessStartTime = std::chrono::steady_clock::now();
 
   triangleCount               = totalTriangleCount;
   progressTrianglesCompleted  = 0;
@@ -395,6 +396,12 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
 
     m_cacheFileView.getHistograms(m_histograms);
     m_cacheFileView.getProcessingStats(m_processingStats);
+
+    const std::string modelName = nvutils::utf8FromPath(filePath.filename());
+    LOGI("CACHE_LOAD_STATS_CSV,model,cache_load_s\n");
+    LOGI("CACHE_LOAD_STATS_CSV,%s,%.6f\n",
+         modelName.c_str(),
+         double(uint64_t(processingInfo.cacheLoadMicroseconds)) / 1000000.0);
   }
 
 
@@ -787,6 +794,7 @@ void Scene::processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex
 
   if(isCached)
   {
+    const uint64_t cacheLoadStart = ProcessingInfo::timestampMicroseconds();
     if(m_loaderConfig.memoryMappedCache)
     {
 
@@ -799,6 +807,7 @@ void Scene::processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex
 
       loadCachedGeometry(geometryStorage, geometryIndex);
     }
+    ProcessingInfo::addMicroseconds(processingInfo.cacheLoadMicroseconds, cacheLoadStart);
   }
   else
   {

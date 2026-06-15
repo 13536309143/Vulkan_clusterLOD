@@ -14,6 +14,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+#include <atomic>
+
+struct clodTimingStats
+{
+	std::atomic_uint64_t cluster_partition_microseconds = 0;
+	std::atomic_uint64_t feature_lod_microseconds = 0;
+};
+#endif
+
 
 // 结构：clodConfig。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
 // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
@@ -87,6 +97,9 @@ struct clodMesh
 	const float* feature_importance;
 	const unsigned char* feature_lock;
 	clodFeatureMetrics* feature_metrics;
+#ifdef __cplusplus
+	clodTimingStats* timing_stats;
+#endif
 };
 
 

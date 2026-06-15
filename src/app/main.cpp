@@ -142,6 +142,12 @@ int main(int argc, char** argv)
 
   auto elemSequencer = std::make_shared<nvapp::ElementSequencer>(sequencerInfo);
 
+  if(sampleElement->isCacheLoadOnly())
+  {
+    sampleElement->doCacheLoadOnly();
+    return 0;
+  }
+
 
   if(sampleElement->isProcessingOnly())
   {

@@ -578,6 +578,7 @@ void Scene::beginProcessingOnly(size_t geometryCount)
 // 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
 void Scene::saveProcessingOnly(ProcessingInfo& processingInfo, size_t geometryIndex)
 {
+  const uint64_t quantCacheStart = ProcessingInfo::timestampMicroseconds();
   {
 
 
@@ -606,6 +607,7 @@ void Scene::saveProcessingOnly(ProcessingInfo& processingInfo, size_t geometryIn
 
     m_processingOnlyFileOffset += dataSize;
   }
+  ProcessingInfo::addMicroseconds(processingInfo.quantCacheMicroseconds, quantCacheStart);
   m_geometryViews[geometryIndex]    = {};
   m_geometryStorages[geometryIndex] = {};
 }
@@ -618,6 +620,8 @@ bool Scene::endProcessingOnly(ProcessingInfo& processingInfo, bool hadError)
 {
   if(!m_processingOnlyFile)
     return false;
+
+  const uint64_t quantCacheStart = ProcessingInfo::timestampMicroseconds();
 
   m_processingStats.groups                = uint64_t(processingInfo.stats.groups);
   m_processingStats.clusters              = uint64_t(processingInfo.stats.clusters);
@@ -703,6 +707,18 @@ bool Scene::endProcessingOnly(ProcessingInfo& processingInfo, bool hadError)
   {
     LOGI("  saved: %s\n", outFilename.c_str());
   }
+
+  ProcessingInfo::addMicroseconds(processingInfo.quantCacheMicroseconds, quantCacheStart);
+  const double totalSeconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - processingInfo.preprocessStartTime).count();
+  const std::string modelName = nvutils::utf8FromPath(m_filePath.filename());
+  LOGI("PREPROCESS_STATS_CSV,model,total_s,cluster_partition_s,feature_lod_s,quant_cache_write_s\n");
+  LOGI("PREPROCESS_STATS_CSV,%s,%.6f,%.6f,%.6f,%.6f\n",
+       modelName.c_str(),
+       totalSeconds,
+       double(uint64_t(processingInfo.lodTimingStats.cluster_partition_microseconds)) / 1000000.0,
+       double(uint64_t(processingInfo.lodTimingStats.feature_lod_microseconds)) / 1000000.0,
+       double(uint64_t(processingInfo.quantCacheMicroseconds)) / 1000000.0);
 
   return true;
 }

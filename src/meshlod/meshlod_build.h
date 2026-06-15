@@ -15,9 +15,22 @@
 #include "meshlod_bounds.h"
 #include "meshlod_clustering.h"
 #include "meshlod_simplify.h"
+#include <chrono>
 
 namespace clod
 {
+
+inline uint64_t timestampMicroseconds()
+{
+	return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+	                    std::chrono::steady_clock::now().time_since_epoch())
+	                    .count());
+}
+
+inline void addMicroseconds(std::atomic_uint64_t& dst, uint64_t start)
+{
+	dst.fetch_add(timestampMicroseconds() - start, std::memory_order_relaxed);
+}
 
 size_t estimateSplitClusterCapacity(const clodConfig& config, const std::vector<Cluster>& clusters, const std::vector<std::vector<int>>& groups)
 {
@@ -126,6 +139,8 @@ void clodBuild_iterationTask(void* iteration_context, void* output_context, size
 	const clodConfig& config = context.config;
 	int                                  depth = context.depth;
 
+	const uint64_t featureStart = mesh.timing_stats ? timestampMicroseconds() : 0;
+
 	std::vector<unsigned int> merged;
 	merged.reserve(groups[i].size() * config.max_triangles * 3);
 
@@ -142,6 +157,9 @@ void clodBuild_iterationTask(void* iteration_context, void* output_context, size
 
 	std::vector<unsigned int> simplified = simplify(config, mesh, merged, locks, target_size, &error);
 
+	if (mesh.timing_stats)
+		addMicroseconds(mesh.timing_stats->feature_lod_microseconds, featureStart);
+
 	if (simplified.size() > merged.size() * config.simplify_threshold)
 	{
 		bounds.error = FLT_MAX;
@@ -157,7 +175,10 @@ void clodBuild_iterationTask(void* iteration_context, void* output_context, size
 	for (size_t j = 0; j < groups[i].size(); ++j)
 		clusters[groups[i][j]].indices = std::vector<unsigned int>();
 
+	const uint64_t clusterStart = mesh.timing_stats ? timestampMicroseconds() : 0;
 	std::vector<Cluster> split = clusterize(config, mesh, simplified.data(), simplified.size());
+	if (mesh.timing_stats)
+		addMicroseconds(mesh.timing_stats->cluster_partition_microseconds, clusterStart);
 
 	size_t cluster_index = context.next_cluster.fetch_add(split.size());
 	size_t pending_index = context.next_pending.fetch_add(split.size());
@@ -214,9 +235,21 @@ size_t clodBuild(clodConfig config, clodMesh mesh, void* output_context, clodOut
 		}
 	}
 
-	analyzeFeatureConstraints(context);
+	if (mesh.timing_stats)
+	{
+		const uint64_t featureStart = timestampMicroseconds();
+		analyzeFeatureConstraints(context);
+		addMicroseconds(mesh.timing_stats->feature_lod_microseconds, featureStart);
+	}
+	else
+	{
+		analyzeFeatureConstraints(context);
+	}
 
+	uint64_t clusterStart = mesh.timing_stats ? timestampMicroseconds() : 0;
 	context.clusters = clusterize(config, context.mesh, context.mesh.indices, context.mesh.index_count);
+	if (mesh.timing_stats)
+		addMicroseconds(mesh.timing_stats->cluster_partition_microseconds, clusterStart);
 
 	context.next_cluster = context.clusters.size();
 
@@ -232,7 +265,10 @@ size_t clodBuild(clodConfig config, clodMesh mesh, void* output_context, clodOut
 	while (context.pending.size() > 1)
 	{
 
+		clusterStart = mesh.timing_stats ? timestampMicroseconds() : 0;
 		context.groups = partition(config, mesh, context.clusters, context.pending, context.remap);
+		if (mesh.timing_stats)
+			addMicroseconds(mesh.timing_stats->cluster_partition_microseconds, clusterStart);
 
 		const size_t splitCapacity = estimateSplitClusterCapacity(config, context.clusters, context.groups);
 
@@ -241,7 +277,16 @@ size_t clodBuild(clodConfig config, clodMesh mesh, void* output_context, clodOut
 		context.next_pending = 0;
 
 
-		lockBoundary(context.locks, context.groups, context.clusters, context.remap, context.mesh.vertex_lock);
+		if (mesh.timing_stats)
+		{
+			const uint64_t featureStart = timestampMicroseconds();
+			lockBoundary(context.locks, context.groups, context.clusters, context.remap, context.mesh.vertex_lock);
+			addMicroseconds(mesh.timing_stats->feature_lod_microseconds, featureStart);
+		}
+		else
+		{
+			lockBoundary(context.locks, context.groups, context.clusters, context.remap, context.mesh.vertex_lock);
+		}
 
 		if (iteration_callback)
 		{

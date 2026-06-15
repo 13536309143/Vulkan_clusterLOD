@@ -15,6 +15,7 @@
 #include <array>
 #include <string>
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <unordered_set>
 #include <unordered_map>
@@ -975,6 +976,22 @@ private:
 
     nvutils::PerformanceTimer clock;
     double                    startTime = 0;
+    std::chrono::steady_clock::time_point preprocessStartTime;
+    clodTimingStats           lodTimingStats;
+    std::atomic_uint64_t      quantCacheMicroseconds = 0;
+    std::atomic_uint64_t      cacheLoadMicroseconds  = 0;
+
+    static uint64_t timestampMicroseconds()
+    {
+      return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now().time_since_epoch())
+                          .count());
+    }
+
+    static void addMicroseconds(std::atomic_uint64_t& dst, uint64_t start)
+    {
+      dst.fetch_add(timestampMicroseconds() - start, std::memory_order_relaxed);
+    }
 
 
     // 函数：init。初始化本模块所需状态、资源或 GPU 侧绑定。

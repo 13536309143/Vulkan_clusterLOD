@@ -266,12 +266,14 @@ public:
   bool getShowDebugUI() const { return m_showDebugUI; }
 
   bool isProcessingOnly() const { return !m_sceneFilePathDropNew.empty() && m_sceneLoaderConfig.processingOnly; }
+  bool isCacheLoadOnly() const { return !m_sceneFilePathDropNew.empty() && m_cacheLoadOnly; }
 
 
   // 函数：doProcessingOnly。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
   // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   void doProcessingOnly();
+  void doCacheLoadOnly();
 
 
   // 函数：parameterSequenceCallback。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
@@ -317,6 +319,7 @@ private:
   std::filesystem::path  m_sceneFilePathDropNew;
   std::string            m_sceneCacheSuffix = ".zippp";
   SceneLoaderConfig      m_sceneLoaderConfig;
+  bool                   m_cacheLoadOnly = false;
   SceneConfig            m_sceneConfig;
   SceneConfig            m_sceneConfigLast;
   SceneConfig            m_sceneConfigEdit;

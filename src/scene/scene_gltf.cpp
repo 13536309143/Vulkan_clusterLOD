@@ -1327,8 +1327,10 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
     LOGW("geometry mismatches scene cache file\n");
     return;
   }
+  uint64_t quantCacheStart = 0;
   if(!isCached)
   {
+    quantCacheStart = ProcessingInfo::timestampMicroseconds();
     if(!(geometry.attributeBits & shaderio::CLUSTER_ATTRIBUTE_VERTEX_NORMAL))
     {
       geometry.attributeBits &= ~shaderio::CLUSTER_ATTRIBUTE_VERTEX_TANGENT;
@@ -1427,6 +1429,7 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
       {
 
         LOGW("Error decompressing GLTF\n");
+        ProcessingInfo::addMicroseconds(processingInfo.quantCacheMicroseconds, quantCacheStart);
         return;
       }
       loadedCompressedViews = true;
@@ -1530,6 +1533,7 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
 
       offsetVertices += numVertices;
     }
+    ProcessingInfo::addMicroseconds(processingInfo.quantCacheMicroseconds, quantCacheStart);
   }
 
 
