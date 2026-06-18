@@ -1,2 +1,0 @@
-﻿group,off_rmse,proposed_rmse,rmse_reduction_pct,off_psnr_db,proposed_psnr_db,psnr_gain_db,off_ssim,proposed_ssim,ssim_gain,off_mean_pixel_error,proposed_mean_pixel_error,mean_error_reduction_pct,off_p95_pixel_error,proposed_p95_pixel_error,p95_error_reduction_pct,off_fps,proposed_fps,fps_gain,fps_gain_pct
-average,0.052546,0.044739,14.857317,25.623,27.033,1.410,0.950905,0.964225,0.013320,0.025426,0.019030,25.155027,0.165143,0.116169,29.655623,421,420,-1,-0.197941
