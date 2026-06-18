@@ -1,0 +1,15 @@
+﻿predicted_class,count,avg_confidence,min_confidence,max_confidence,low_conf_lt_0_4,shape_counts
+screws_bolts_studs,474,0.6316670012436335,0.1541062593460083,0.8166426420211792,67,long_slender:202; irregular:154; flat_plate:77; compact_block:38; round_or_cubic:3
+pins_rivets_keys,463,0.6231510345029522,0.15135470032691956,0.8082090616226196,88,flat_plate:245; long_slender:103; irregular:97; compact_block:9; round_or_cubic:9
+plates_discs_shapes,459,0.5898785265182878,0.15475896000862122,0.9554986357688904,131,irregular:225; flat_plate:205; compact_block:15; round_or_cubic:14
+washers_rings_spacers,358,0.6851672149736788,0.17755982279777527,0.8217231035232544,47,flat_plate:222; irregular:116; round_or_cubic:19; compact_block:1
+handles_controls,295,0.4028857885275857,0.13253553211688995,0.80898118019104,168,irregular:180; flat_plate:57; long_slender:29; round_or_cubic:19; compact_block:10
+joints_clamps_structural_connectors,279,0.48845711307713635,0.13389815390110016,0.9370065331459045,120,irregular:140; flat_plate:54; long_slender:34; compact_block:27; round_or_cubic:24
+bearings_bushings_guides,232,0.5207965932786465,0.16861410439014435,0.8368348479270935,79,irregular:93; compact_block:60; flat_plate:39; round_or_cubic:24; long_slender:16
+nuts,217,0.6892158665140653,0.16578425467014313,0.8126807808876038,13,round_or_cubic:146; irregular:38; compact_block:32; long_slender:1
+pipe_fittings_valves_nozzles,97,0.41036638356361194,0.17574292421340942,0.7768392562866211,51,irregular:51; flat_plate:16; long_slender:13; round_or_cubic:10; compact_block:7
+motors_gearmotors,70,0.5480722005878176,0.20168043673038483,0.8506667017936707,25,irregular:45; long_slender:14; flat_plate:7; compact_block:4
+wheels_castors,37,0.38113716123877345,0.19364167749881744,0.700711190700531,21,irregular:32; compact_block:5
+gears_pulleys_chains,29,0.6015266195453447,0.1267755627632141,0.8292775750160217,8,round_or_cubic:10; compact_block:9; irregular:8; flat_plate:2
+rotating_fluid_machinery,20,0.42362644895911217,0.13707320392131805,0.9146813750267029,13,irregular:13; flat_plate:6; long_slender:1
+springs,19,0.27178196295311574,0.145626038312912,0.4611682891845703,17,flat_plate:14; long_slender:5

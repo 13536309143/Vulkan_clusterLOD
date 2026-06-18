@@ -1,0 +1,92 @@
+{
+  "num_rows": 24259,
+  "thresholds": {
+    "diag_p10": 0.014999451556272518,
+    "diag_p25": 0.025764926183936453,
+    "diag_p50": 0.0629580929358667,
+    "diag_p75": 0.11233034043691029,
+    "diag_p90": 0.28080485645293196,
+    "diag_p97": 0.7847276774164011,
+    "face_p50": 296,
+    "face_p75": 1852,
+    "face_p90": 3990,
+    "face_p97": 13702,
+    "area_p50": 0.0020507918670773506,
+    "area_p75": 0.006200027652084827,
+    "area_p90": 0.05648115277290344
+  },
+  "size_class_counts": {
+    "S5_xlarge": 1708,
+    "S6_huge": 717,
+    "S4_large": 3368,
+    "S3_medium": 6334,
+    "S2_small": 5839,
+    "S0_micro": 2503,
+    "S1_tiny": 3790
+  },
+  "detail_class_counts": {
+    "D1_low": 14505,
+    "D0_very_low": 3629,
+    "D2_medium": 2716,
+    "D4_very_high": 1126,
+    "D3_high": 2283
+  },
+  "confidence_class_counts": {
+    "C2_high": 12007,
+    "C0_low_or_ambiguous": 4620,
+    "C1_medium": 7632
+  },
+  "semantic_group_counts": {
+    "functional_part": 10497,
+    "semantic_uncertain": 2165,
+    "control_or_handle": 1020,
+    "structural_part": 8122,
+    "semantic_uncertain:geom_high_detail_irregular": 116,
+    "semantic_uncertain:geom_compact_block": 930,
+    "semantic_uncertain:geom_simple_irregular": 365,
+    "semantic_uncertain:geom_slender_bar": 379,
+    "semantic_uncertain:geom_ring_or_disk": 91,
+    "semantic_uncertain:geom_thin_plate": 502,
+    "semantic_uncertain:geom_ultra_thin_sheet": 72
+  },
+  "geometry_fallback_counts": {
+    "geom_thin_plate": 5788,
+    "geom_simple_irregular": 3125,
+    "geom_wire_or_rod": 183,
+    "geom_ring_or_disk": 966,
+    "geom_compact_block": 10956,
+    "geom_slender_bar": 1366,
+    "geom_high_detail_irregular": 841,
+    "geom_ultra_thin_sheet": 1034
+  },
+  "lod_priority_counts": {
+    "P4_conservative": 3114,
+    "P3_standard": 4651,
+    "P2_aggressive": 10185,
+    "P5_preserve": 1064,
+    "P1_micro_or_uncertain": 5245
+  },
+  "lod_strategy_counts": {
+    "conservative_simplification": 3114,
+    "standard_simplification": 4651,
+    "aggressive_simplification": 10185,
+    "preserve_functional_or_large": 1064,
+    "micro_aggressive_or_cull_far": 5245
+  },
+  "predicted_class_counts": {
+    "pins_rivets_keys": 1622,
+    "handles_controls": 1726,
+    "bearings_bushings_guides": 1181,
+    "motors_gearmotors": 308,
+    "pipe_fittings_valves_nozzles": 1656,
+    "screws_bolts_studs": 2969,
+    "joints_clamps_structural_connectors": 8527,
+    "springs": 270,
+    "gears_pulleys_chains": 9,
+    "wheels_castors": 16,
+    "rotating_fluid_machinery": 189,
+    "plates_discs_shapes": 1500,
+    "washers_rings_spacers": 3760,
+    "nuts": 526
+  }
+}
