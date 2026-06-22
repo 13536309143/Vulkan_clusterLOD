@@ -1,0 +1,15 @@
+﻿predicted_class,count,avg_confidence,min_confidence,max_confidence,low_conf_lt_0_4,shape_counts
+pins_rivets_keys,719,0.6351490274631264,0.15107658505439758,0.8159686923027039,141,flat_plate:564; irregular:62; long_slender:48; compact_block:39; round_or_cubic:6
+joints_clamps_structural_connectors,572,0.5990510839786563,0.12925630807876587,0.9510300159454346,176,irregular:260; flat_plate:129; compact_block:109; long_slender:53; round_or_cubic:21
+plates_discs_shapes,557,0.652081227521922,0.13955043256282806,0.936295747756958,71,flat_plate:424; irregular:100; round_or_cubic:26; compact_block:7
+bearings_bushings_guides,461,0.5180077409925274,0.10852442681789398,0.8140391707420349,167,irregular:243; flat_plate:102; round_or_cubic:58; compact_block:54; long_slender:4
+screws_bolts_studs,305,0.6551738026689311,0.130118265748024,0.8193392157554626,52,long_slender:122; irregular:70; flat_plate:61; compact_block:50; round_or_cubic:2
+handles_controls,219,0.4255594473723407,0.11726999282836914,0.769403874874115,111,long_slender:63; irregular:60; compact_block:46; flat_plate:28; round_or_cubic:22
+nuts,161,0.716966356179729,0.1724863201379776,0.7784389853477478,12,round_or_cubic:131; compact_block:18; irregular:12
+pipe_fittings_valves_nozzles,136,0.48687116659301166,0.13687245547771454,0.7864234447479248,66,irregular:58; round_or_cubic:44; long_slender:24; compact_block:6; flat_plate:4
+motors_gearmotors,110,0.453534856709567,0.15177422761917114,0.872444212436676,69,round_or_cubic:52; irregular:29; long_slender:24; compact_block:4; flat_plate:1
+washers_rings_spacers,110,0.7201788411899046,0.2336156666278839,0.8074361681938171,11,irregular:85; flat_plate:25
+wheels_castors,63,0.7780890022478406,0.1961422860622406,0.9345694184303284,3,compact_block:52; irregular:8; round_or_cubic:3
+gears_pulleys_chains,58,0.717218608434858,0.14501312375068665,0.8464462161064148,8,round_or_cubic:37; compact_block:18; irregular:3
+rotating_fluid_machinery,55,0.1916092116724361,0.11564970761537552,0.45312148332595825,54,flat_plate:24; irregular:16; long_slender:12; compact_block:3
+springs,30,0.294207035501798,0.12541554868221283,0.722170889377594,24,flat_plate:28; long_slender:2
