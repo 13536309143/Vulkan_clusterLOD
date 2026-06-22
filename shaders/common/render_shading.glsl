@@ -77,6 +77,26 @@ vec3 colorizeID(uint clusterID)
   return vec3(unpackUnorm4x8(murmurHash(clusterID ^ view.colorXor)).xyz * 0.5 + 0.3);
 }
 
+vec3 semanticLodColor(uint instanceID)
+{
+  uint flags = instances[instanceID].lodPolicyFlags;
+  if((flags & SEMANTIC_LOD_VALID_BIT) == 0)
+  {
+    return vec3(0.42, 0.42, 0.42);
+  }
+
+  uint priority = (flags >> SEMANTIC_LOD_PRIORITY_SHIFT) & SEMANTIC_LOD_PRIORITY_MASK;
+  if(priority <= 1)
+    return vec3(0.95, 0.12, 0.10);
+  if(priority == 2)
+    return vec3(1.00, 0.48, 0.08);
+  if(priority == 3)
+    return vec3(0.95, 0.82, 0.18);
+  if(priority == 4)
+    return vec3(0.10, 0.72, 0.82);
+  return vec3(0.16, 0.35, 1.00);
+}
+
 
 // 函数：visualizeColor。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
@@ -95,6 +115,10 @@ vec3 visualizeColor(uint visData, uint instanceID)
   else if (view.visualize == VISUALIZE_MATERIAL)
   {
     return pow(unpackUnorm4x8(instances[instanceID].packedColor).xyz * 0.95 + 0.05, vec3(1.0/2.2));
+  }
+  else if (view.visualize == VISUALIZE_SEMANTIC_LOD)
+  {
+    return semanticLodColor(instanceID);
   }
   else
   {

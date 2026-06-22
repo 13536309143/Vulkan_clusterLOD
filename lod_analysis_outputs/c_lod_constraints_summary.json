@@ -37,11 +37,14 @@
     "C1_medium": 17097
   },
   "semantic_group_counts": {
-    "structural_part": 10582,
+    "bulk_static_part": 7282,
     "semantic_uncertain": 7474,
-    "functional_part": 31355,
+    "motion_or_precision_part": 8111,
+    "structural_key_part": 3300,
     "semantic_uncertain:geom_wire_or_rod": 29,
+    "fastener_repeated": 22911,
     "semantic_uncertain:geom_slender_bar": 2475,
+    "fluid_or_interface_part": 333,
     "semantic_uncertain:geom_compact_block": 5212,
     "control_or_handle": 1190,
     "semantic_uncertain:geom_simple_irregular": 1036,
@@ -61,18 +64,31 @@
     "geom_high_detail_irregular": 4566
   },
   "lod_priority_counts": {
-    "P5_preserve": 2624,
-    "P4_conservative": 7988,
-    "P2_aggressive": 22525,
-    "P3_standard": 12758,
-    "P1_micro_or_uncertain": 15572
+    "P2_aggressive": 24736,
+    "P5_preserve": 8903,
+    "P4_conservative": 3126,
+    "P1_micro_or_uncertain": 23198,
+    "P3_standard": 1504
   },
   "lod_strategy_counts": {
-    "preserve_functional_or_large": 2624,
-    "conservative_simplification": 7988,
-    "aggressive_simplification": 22525,
-    "standard_simplification": 12758,
-    "micro_aggressive_or_cull_far": 15572
+    "large_static_bulk_fast_simplify": 2447,
+    "preserve_motion_or_precision_key": 8031,
+    "ordinary_part_fast_simplify": 8549,
+    "protect_structural_connector": 2428,
+    "uncertain_small_or_sheet_cull_far": 13755,
+    "balanced_visible_part": 475,
+    "preserve_structural_connector_key": 872,
+    "fastener_repeated_aggressive": 13667,
+    "micro_or_trivial_cull_far": 199,
+    "interface_part_balanced": 129,
+    "fastener_micro_cull_far": 9244,
+    "protect_interface_part": 204,
+    "protect_high_detail_shape": 122,
+    "control_surface_balanced": 898,
+    "protect_motion_part": 80,
+    "protect_control_surface": 292,
+    "uncertain_large_fast_simplify": 73,
+    "large_static_bulk_balanced": 2
   },
   "predicted_class_counts": {
     "plates_discs_shapes": 8664,

@@ -299,7 +299,26 @@ void main()
       uint packedColor = packUnorm4x8(vec4(0,0,0,1));
     #else
 
-      vec4 color       = vec4(colorizeID(clusterID) * relative, 1.0);
+      vec3 swColor = colorizeID(clusterID);
+      if(view.visualize == VISUALIZE_SEMANTIC_LOD)
+      {
+        uint flags = instance.lodPolicyFlags;
+        uint priority = (flags >> SEMANTIC_LOD_PRIORITY_SHIFT) & SEMANTIC_LOD_PRIORITY_MASK;
+        if((flags & SEMANTIC_LOD_VALID_BIT) == 0)
+          swColor = vec3(0.42, 0.42, 0.42);
+        else if(priority <= 1)
+          swColor = vec3(0.95, 0.12, 0.10);
+        else if(priority == 2)
+          swColor = vec3(1.00, 0.48, 0.08);
+        else if(priority == 3)
+          swColor = vec3(0.95, 0.82, 0.18);
+        else if(priority == 4)
+          swColor = vec3(0.10, 0.72, 0.82);
+        else
+          swColor = vec3(0.16, 0.35, 1.00);
+      }
+
+      vec4 color       = vec4(swColor * relative, 1.0);
 
       uint packedColor = packUnorm4x8(color);
     #endif

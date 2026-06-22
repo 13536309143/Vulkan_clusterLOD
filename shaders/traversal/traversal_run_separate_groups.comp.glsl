@@ -268,7 +268,7 @@ void main()
   mat4x3 worldMatrix     = instances[instanceID].worldMatrix;
 
   float  uniformScale    = computeUniformScale(worldMatrix);
-  float  errorScale      = 1.0;
+  float  errorScale      = max(instances[instanceID].lodErrorScale, 0.01);
   mat4x3 traversalMatrix = mat4x3(build.traversalViewMatrix * toMat4(worldMatrix));
 
 #if USE_STREAMING

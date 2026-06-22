@@ -958,6 +958,12 @@ Scene::GltfNodeImportResult Scene::addInstancesFromNodeGLTF(const std::vector<si
       instance.geometryID = uint32_t(meshToGeometry[meshIndex]);
       instance.matrix     = nodeObjToWorldTransform;
       instance.bbox       = transformBBox(m_geometryViews[instance.geometryID].bbox, instance.matrix);
+      const uint32_t nodeIndex = uint32_t(node - data->nodes);
+      if(const SemanticLodPolicy* policy = findSemanticNodePolicy(nodeIndex, uint32_t(meshIndex)))
+      {
+        instance.lodErrorScale = policy->lodErrorScale;
+        instance.lodPolicy = policy->flags;
+      }
 
       m_geometryViews[instance.geometryID].instanceReferenceCount++;
 
@@ -1250,6 +1256,13 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
 
   const cgltf_mesh& gltfMesh = gltf->meshes[meshIndex];
   GeometryStorage&  geometry = m_geometryStorages[geometryIndex];
+  if(const SemanticLodPolicy* policy = findSemanticMeshPolicy(uint32_t(meshIndex)))
+  {
+    geometry.semanticPolicy = *policy;
+    geometry.hasSemanticLodPolicy = true;
+    geometry.semanticLodErrorScale = policy->lodErrorScale;
+    geometry.semanticLodPolicyFlags = policy->flags;
+  }
   geometry.bbox              = {{FLT_MAX, FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX, -FLT_MAX}, 0, 0};
 
 
@@ -1316,6 +1329,7 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
   memset(&geometry.lodInfo, 0, sizeof(geometry.lodInfo));
   geometry.lodInfo.inputTriangleCount = triangleCount;
   geometry.lodInfo.inputVertexCount   = verticesCount;
+  geometry.lodInfo.semanticPolicyHash = semanticPolicyHashForMesh(uint32_t(meshIndex));
 
 
   bool isCached = checkCache(geometry.lodInfo, geometryIndex);

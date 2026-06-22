@@ -312,6 +312,8 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
 
   m_cachePartialFilePath.replace_extension(oldExtension + cacheSuffix + "_partial");
 
+  loadSemanticLodPolicies();
+
   if(!skipCache && !m_loaderConfig.processingOnly && m_loaderConfig.autoLoadCache)
   {
 
@@ -818,12 +820,14 @@ void Scene::processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex
     else
     {
 
+      const uint64_t semanticPolicyHash = geometryStorage.lodInfo.semanticPolicyHash;
 
       geometryStorage.lodInfo.inputTriangleCount       = geometryStorage.triangles.size();
 
       geometryStorage.lodInfo.inputVertexCount         = geometryStorage.vertexPositions.size();
       geometryStorage.lodInfo.inputTriangleIndicesHash = 0;
       geometryStorage.lodInfo.inputVerticesHash        = 0;
+      geometryStorage.lodInfo.semanticPolicyHash       = semanticPolicyHash;
 
 
       size_t originalVertexCount = geometryStorage.vertexPositions.size();

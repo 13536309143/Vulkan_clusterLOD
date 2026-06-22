@@ -192,7 +192,7 @@ void main()
     mat4x3 worldMatrix = instances[instanceID].worldMatrix;
 
     float uniformScale = computeUniformScale(worldMatrix);
-    float errorScale   = 1.0;
+    float errorScale   = max(instance.lodErrorScale, 0.01);
 
 
     mat4 transform = build.traversalViewMatrix * toMat4(worldMatrix);

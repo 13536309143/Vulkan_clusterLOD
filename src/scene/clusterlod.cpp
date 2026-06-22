@@ -542,6 +542,13 @@ namespace lodclusters {
      clodInfo.feature_protect_threshold = m_config.featureProtectThreshold;
      clodInfo.feature_critical_threshold = m_config.featureCriticalThreshold;
 
+     if(geometry.hasSemanticLodPolicy)
+     {
+       applySemanticPolicyToConfig(clodInfo, geometry.semanticPolicy);
+       geometry.semanticLodErrorScale = geometry.semanticPolicy.lodErrorScale;
+       geometry.semanticLodPolicyFlags = geometry.semanticPolicy.flags;
+     }
+
 
      clodMesh inputMesh                = {};
      inputMesh.vertex_positions        = reinterpret_cast<const float*>(geometry.vertexPositions.data());

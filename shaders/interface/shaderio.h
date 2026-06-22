@@ -61,6 +61,7 @@
 // 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
 // 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define VISUALIZE_DEPTH_ONLY 7
+#define VISUALIZE_SEMANTIC_LOD 8
 
 
 // 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。

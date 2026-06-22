@@ -120,6 +120,14 @@ enum ClusterAttributeBits
 #define SHADERIO_ASSEMBLY_VISIBLE_BIT 1u
 #define SHADERIO_ASSEMBLY_LOD_COARSE_BIT 2u
 
+#define SEMANTIC_LOD_VALID_BIT 1u
+#define SEMANTIC_LOD_ALLOW_CULL_BIT 2u
+#define SEMANTIC_LOD_AGGRESSIVE_BIT 4u
+#define SEMANTIC_LOD_PRESERVE_BIT 8u
+#define SEMANTIC_LOD_LOW_CONF_BIT 16u
+#define SEMANTIC_LOD_PRIORITY_SHIFT 8u
+#define SEMANTIC_LOD_PRIORITY_MASK 0x7u
+
 
 // 结构：BBox。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
 // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
@@ -481,8 +489,8 @@ struct RenderInstance
   float    maxLodLevelRcp;
   uint32_t packedColor;
   uint32_t assemblyID;
-  uint32_t _pad0;
-  uint32_t _pad1;
+  float    lodErrorScale;
+  uint32_t lodPolicyFlags;
   uint32_t _pad2;
 };
 

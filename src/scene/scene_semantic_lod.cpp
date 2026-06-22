@@ -1,0 +1,362 @@
+#include "scene.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
+
+#include <nvutils/file_operations.hpp>
+#include <nvutils/logger.hpp>
+
+namespace lodclusters {
+namespace {
+
+uint64_t hashCombine(uint64_t seed, uint64_t value)
+{
+  value ^= value >> 33;
+  value *= 0xff51afd7ed558ccdULL;
+  value ^= value >> 33;
+  value *= 0xc4ceb9fe1a85ec53ULL;
+  value ^= value >> 33;
+  return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+}
+
+uint64_t hashString(uint64_t seed, const std::string& text)
+{
+  for(unsigned char ch : text)
+  {
+    seed ^= uint64_t(ch);
+    seed *= 1099511628211ULL;
+  }
+  return seed;
+}
+
+uint64_t semanticNodeKey(uint32_t nodeIndex, uint32_t meshIndex)
+{
+  return (uint64_t(nodeIndex) << 32) | uint64_t(meshIndex);
+}
+
+std::vector<std::string> splitCsvLine(const std::string& line)
+{
+  std::vector<std::string> fields;
+  std::string current;
+  bool quoted = false;
+
+  for(size_t i = 0; i < line.size(); ++i)
+  {
+    const char ch = line[i];
+    if(ch == '"')
+    {
+      if(quoted && i + 1 < line.size() && line[i + 1] == '"')
+      {
+        current.push_back('"');
+        ++i;
+      }
+      else
+      {
+        quoted = !quoted;
+      }
+    }
+    else if(ch == ',' && !quoted)
+    {
+      fields.push_back(current);
+      current.clear();
+    }
+    else
+    {
+      current.push_back(ch);
+    }
+  }
+
+  fields.push_back(current);
+  return fields;
+}
+
+std::string stripBom(std::string text)
+{
+  if(text.size() >= 3 && uint8_t(text[0]) == 0xEF && uint8_t(text[1]) == 0xBB && uint8_t(text[2]) == 0xBF)
+  {
+    text.erase(0, 3);
+  }
+  return text;
+}
+
+bool parseBool(const std::string& value)
+{
+  std::string lower;
+  lower.reserve(value.size());
+  for(char ch : value)
+    lower.push_back(char(std::tolower(uint8_t(ch))));
+  return lower == "true" || lower == "1" || lower == "yes";
+}
+
+uint32_t parseUint(const std::string& value, uint32_t fallback = ~0u)
+{
+  try
+  {
+    if(value.empty())
+      return fallback;
+    return uint32_t(std::stoul(value));
+  }
+  catch(...)
+  {
+    return fallback;
+  }
+}
+
+float parseFloat(const std::string& value, float fallback = 0.0f)
+{
+  try
+  {
+    if(value.empty())
+      return fallback;
+    return std::stof(value);
+  }
+  catch(...)
+  {
+    return fallback;
+  }
+}
+
+uint32_t parsePriority(const std::string& value)
+{
+  for(char ch : value)
+  {
+    if(ch >= '1' && ch <= '5')
+      return uint32_t(ch - '0');
+  }
+  return 3;
+}
+
+float clampf(float value, float lo, float hi)
+{
+  return std::min(std::max(value, lo), hi);
+}
+
+void derivePolicy(Scene::SemanticLodPolicy& policy)
+{
+  static const float simplifyByPriority[] = {0.38f, 0.38f, 0.45f, 0.52f, 0.62f, 0.74f};
+  static const float mergeByPriority[]    = {0.80f, 0.80f, 0.90f, 1.00f, 1.12f, 1.28f};
+  static const float featureByPriority[]  = {0.55f, 0.55f, 0.75f, 1.00f, 1.20f, 1.45f};
+  static const float protectByPriority[]  = {0.94f, 0.94f, 0.86f, 0.78f, 0.70f, 0.62f};
+  static const float criticalByPriority[] = {0.985f, 0.985f, 0.96f, 0.93f, 0.88f, 0.82f};
+
+  const uint32_t priority = std::min<uint32_t>(policy.priority, 5);
+  policy.flags = SEMANTIC_LOD_VALID_BIT | ((priority & SEMANTIC_LOD_PRIORITY_MASK) << SEMANTIC_LOD_PRIORITY_SHIFT);
+  if(policy.allowCull)
+    policy.flags |= SEMANTIC_LOD_ALLOW_CULL_BIT;
+  if(priority <= 2)
+    policy.flags |= SEMANTIC_LOD_AGGRESSIVE_BIT;
+  if(priority >= 5)
+    policy.flags |= SEMANTIC_LOD_PRESERVE_BIT;
+  if(policy.confidence > 0.0f && policy.confidence < 0.40f)
+    policy.flags |= SEMANTIC_LOD_LOW_CONF_BIT;
+
+  const float stableRatio = simplifyByPriority[priority];
+  policy.simplifyRatio = clampf(stableRatio * 0.80f + policy.targetRatioMid * 0.20f, 0.36f, 0.78f);
+  policy.errorMergeScale = mergeByPriority[priority];
+  policy.featureWeightScale = featureByPriority[priority];
+  policy.featureProtectThreshold = protectByPriority[priority];
+  policy.featureCriticalThreshold = criticalByPriority[priority];
+
+  const float weight = std::max(policy.screenErrorWeight, 0.25f);
+  policy.lodErrorScale = clampf(1.0f / weight, 0.55f, 2.10f);
+}
+
+void mergeMeshPolicy(Scene::SemanticLodPolicy& dst, const Scene::SemanticLodPolicy& src)
+{
+  if(!dst.valid)
+  {
+    dst = src;
+    dst.nodeIndex = ~0u;
+    derivePolicy(dst);
+    return;
+  }
+
+  dst.priority = std::max(dst.priority, src.priority);
+  dst.allowCull = dst.allowCull && src.allowCull;
+  dst.confidence = std::max(dst.confidence, src.confidence);
+  dst.targetRatioNear = std::max(dst.targetRatioNear, src.targetRatioNear);
+  dst.targetRatioMid = std::max(dst.targetRatioMid, src.targetRatioMid);
+  dst.targetRatioFar = std::max(dst.targetRatioFar, src.targetRatioFar);
+  dst.screenErrorWeight = std::max(dst.screenErrorWeight, src.screenErrorWeight);
+  dst.rowHash = hashCombine(dst.rowHash, src.rowHash);
+  derivePolicy(dst);
+}
+
+std::filesystem::path normalizeCandidate(const std::filesystem::path& path)
+{
+  std::error_code ec;
+  return std::filesystem::weakly_canonical(path, ec);
+}
+
+void pushCandidate(std::vector<std::filesystem::path>& candidates, std::unordered_set<std::string>& seen, const std::filesystem::path& path)
+{
+  const std::filesystem::path normalized = normalizeCandidate(path);
+  const std::string key = nvutils::utf8FromPath(normalized);
+  if(seen.insert(key).second)
+    candidates.push_back(normalized);
+}
+
+}
+
+void Scene::loadSemanticLodPolicies()
+{
+  m_semanticMeshPolicies.clear();
+  m_semanticNodePolicies.clear();
+  m_semanticLodFingerprint = 0;
+  m_semanticLodPath.clear();
+
+  const std::string csvName = m_filePath.stem().string() + "_lod_constraints.csv";
+  std::vector<std::filesystem::path> candidates;
+  std::unordered_set<std::string> seen;
+  const std::filesystem::path sceneDir = m_filePath.parent_path();
+  const std::filesystem::path cwd = std::filesystem::current_path();
+
+  pushCandidate(candidates, seen, sceneDir / csvName);
+  pushCandidate(candidates, seen, sceneDir / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, sceneDir.parent_path() / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd.parent_path() / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd.parent_path().parent_path() / "lod_analysis_outputs" / csvName);
+
+  std::filesystem::path csvPath;
+  for(const std::filesystem::path& candidate : candidates)
+  {
+    std::error_code ec;
+    if(std::filesystem::exists(candidate, ec))
+    {
+      csvPath = candidate;
+      break;
+    }
+  }
+
+  if(csvPath.empty())
+  {
+    LOGI("Semantic LOD: no constraints CSV found for %s\n", m_filePath.filename().string().c_str());
+    return;
+  }
+
+  std::ifstream file(csvPath);
+  if(!file)
+  {
+    LOGW("Semantic LOD: failed to open %s\n", nvutils::utf8FromPath(csvPath).c_str());
+    return;
+  }
+
+  std::string headerLine;
+  if(!std::getline(file, headerLine))
+    return;
+
+  std::vector<std::string> headers = splitCsvLine(stripBom(headerLine));
+  std::unordered_map<std::string, size_t> headerIndex;
+  for(size_t i = 0; i < headers.size(); ++i)
+    headerIndex[headers[i]] = i;
+
+  auto column = [&](const std::vector<std::string>& row, const char* name) -> std::string {
+    auto it = headerIndex.find(name);
+    if(it == headerIndex.end() || it->second >= row.size())
+      return {};
+    return row[it->second];
+  };
+
+  uint64_t fingerprint = 0x73656d616e746963ULL;
+  std::unordered_map<uint32_t, SemanticLodPolicy> meshPolicies;
+  size_t rows = 0;
+  std::string line;
+  while(std::getline(file, line))
+  {
+    if(line.empty())
+      continue;
+
+    std::vector<std::string> row = splitCsvLine(line);
+    SemanticLodPolicy policy;
+    policy.valid = true;
+    policy.meshIndex = parseUint(column(row, "mesh_index"));
+    policy.nodeIndex = parseUint(column(row, "node_index"));
+    if(policy.meshIndex == ~0u || policy.nodeIndex == ~0u)
+      continue;
+
+    policy.priority = parsePriority(column(row, "lod_priority"));
+    policy.allowCull = parseBool(column(row, "allow_cull"));
+    policy.confidence = parseFloat(column(row, "confidence"), 0.0f);
+    policy.targetRatioNear = parseFloat(column(row, "target_ratio_near"), policy.targetRatioNear);
+    policy.targetRatioMid = parseFloat(column(row, "target_ratio_mid"), policy.targetRatioMid);
+    policy.targetRatioFar = parseFloat(column(row, "target_ratio_far"), policy.targetRatioFar);
+    policy.screenErrorWeight = parseFloat(column(row, "screen_error_weight"), policy.screenErrorWeight);
+    policy.rowHash = hashString(hashCombine(hashCombine(policy.meshIndex, policy.nodeIndex), policy.priority), line);
+    derivePolicy(policy);
+
+    fingerprint = hashCombine(fingerprint, policy.rowHash);
+    m_semanticNodePolicies[semanticNodeKey(policy.nodeIndex, policy.meshIndex)] = policy;
+    mergeMeshPolicy(meshPolicies[policy.meshIndex], policy);
+    ++rows;
+  }
+
+  if(meshPolicies.empty())
+  {
+    LOGW("Semantic LOD: %s had no usable rows\n", nvutils::utf8FromPath(csvPath).c_str());
+    return;
+  }
+
+  uint32_t maxMeshIndex = 0;
+  for(const auto& item : meshPolicies)
+    maxMeshIndex = std::max(maxMeshIndex, item.first);
+
+  m_semanticMeshPolicies.assign(size_t(maxMeshIndex) + 1, {});
+  for(const auto& item : meshPolicies)
+    m_semanticMeshPolicies[item.first] = item.second;
+
+  m_semanticLodFingerprint = hashCombine(fingerprint, rows);
+  m_semanticLodPath = csvPath;
+
+  LOGI("Semantic LOD: loaded %zu rows, %zu mesh policies from %s\n", rows, meshPolicies.size(),
+       nvutils::utf8FromPath(csvPath).c_str());
+}
+
+const Scene::SemanticLodPolicy* Scene::findSemanticMeshPolicy(uint32_t meshIndex) const
+{
+  if(meshIndex < m_semanticMeshPolicies.size() && m_semanticMeshPolicies[meshIndex].valid)
+    return &m_semanticMeshPolicies[meshIndex];
+  return nullptr;
+}
+
+const Scene::SemanticLodPolicy* Scene::findSemanticNodePolicy(uint32_t nodeIndex, uint32_t meshIndex) const
+{
+  auto it = m_semanticNodePolicies.find(semanticNodeKey(nodeIndex, meshIndex));
+  if(it != m_semanticNodePolicies.end() && it->second.valid)
+    return &it->second;
+  return findSemanticMeshPolicy(meshIndex);
+}
+
+uint64_t Scene::semanticPolicyHashForMesh(uint32_t meshIndex) const
+{
+  const SemanticLodPolicy* policy = findSemanticMeshPolicy(meshIndex);
+  if(!policy)
+    return 0;
+  return hashCombine(m_semanticLodFingerprint, policy->rowHash);
+}
+
+void Scene::applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPolicy& policy) const
+{
+  if(!policy.valid)
+    return;
+
+  config.simplify_ratio = clampf(policy.simplifyRatio, 0.36f, 0.78f);
+  config.simplify_error_merge_previous *= policy.errorMergeScale;
+
+  if(policy.priority <= 1)
+  {
+    config.feature_constraints = false;
+  }
+  else if(config.feature_constraints)
+  {
+    config.feature_attribute_weight *= policy.featureWeightScale;
+    config.feature_protect_threshold = policy.featureProtectThreshold;
+    config.feature_critical_threshold = policy.featureCriticalThreshold;
+  }
+}
+
+}  // namespace lodclusters

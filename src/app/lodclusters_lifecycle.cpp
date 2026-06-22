@@ -201,6 +201,8 @@ void LodClusters::onAttach(nvapp::Application* app)
 
     m_ui.enumAdd(GUI_VISUALIZE, VISUALIZE_TRIANGLE, "triangles");
 
+    m_ui.enumAdd(GUI_VISUALIZE, VISUALIZE_SEMANTIC_LOD, "semantic lod policy");
+
   }
 
 

@@ -8,6 +8,7 @@
 //==============================================================================
 // 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
 // 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
+#include <algorithm>
 #include <random>
 #include <vector>
 #include <volk.h>
@@ -191,6 +192,8 @@ void Renderer::initBasics(Resources& res, RenderScene& rscene, const RendererCon
     renderInstance.maxLodLevelRcp = geometry.lodLevelsCount > 1 ? 1.0f / float(geometry.lodLevelsCount - 1) : 0.0f;
 
     renderInstance.packedColor    = glm::packUnorm4x8(sceneInstance.color);
+    renderInstance.lodErrorScale  = std::max(sceneInstance.lodErrorScale, 0.01f);
+    renderInstance.lodPolicyFlags = sceneInstance.lodPolicy;
     renderInstance.twoSided       = sceneInstance.twoSided ? 1 : 0;
     renderInstance.flipWinding =
         (!sceneInstance.twoSided && ((glm::determinant(sceneInstance.matrix) <= 0) != config.flipWinding)) ? 1 : 0;

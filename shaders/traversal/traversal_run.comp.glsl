@@ -276,7 +276,7 @@ traversalMetric = Group_in(geometry.streamingGroupAddresses.d[clusterGeneratingG
   mat4x3 worldMatrix = instances[instanceID].worldMatrix;
 
   float uniformScale = computeUniformScale(worldMatrix);
-  float errorScale   = 1.0;
+  float errorScale   = max(instances[instanceID].lodErrorScale, 0.01);
 #if USE_CULLING && (TARGETS_RASTERIZATION || USE_FORCED_INVISIBLE_CULLING)
 
 

@@ -425,6 +425,7 @@ public:
     uint64_t inputVertexCount         = 0;
     uint64_t inputTriangleIndicesHash = 0;
     uint64_t inputVerticesHash        = 0;
+    uint64_t semanticPolicyHash       = 0;
   };
 
 
@@ -455,6 +456,8 @@ public:
     GeometryLodInput lodInfo;
 
     uint32_t instanceReferenceCount{};
+    float    semanticLodErrorScale = 1.0f;
+    uint32_t semanticLodPolicyFlags = 0;
   };
 
 
@@ -528,6 +531,8 @@ public:
     uint32_t       assemblyID = SHADERIO_INVALID_ASSEMBLY;
     bool           twoSided   = false;
     glm::vec4      color{0.8, 0.8, 0.8, 1.0f};
+    float          lodErrorScale = 1.0f;
+    uint32_t       lodPolicy     = 0;
   };
 
   struct GltfNodeImportResult
@@ -664,6 +669,28 @@ public:
 
   size_t m_cacheFileSize = 0;
 
+  struct SemanticLodPolicy
+  {
+    bool     valid      = false;
+    bool     allowCull  = false;
+    uint32_t priority   = 3;
+    uint32_t flags      = 0;
+    uint32_t meshIndex  = ~0u;
+    uint32_t nodeIndex  = ~0u;
+    float    confidence = 0.0f;
+    float    targetRatioNear = 0.70f;
+    float    targetRatioMid  = 0.40f;
+    float    targetRatioFar  = 0.18f;
+    float    screenErrorWeight = 1.0f;
+    float    simplifyRatio = 0.50f;
+    float    lodErrorScale = 1.0f;
+    float    errorMergeScale = 1.0f;
+    float    featureWeightScale = 1.0f;
+    float    featureProtectThreshold = 0.78f;
+    float    featureCriticalThreshold = 0.93f;
+    uint64_t rowHash = 0;
+  };
+
 private:
 
 
@@ -683,6 +710,8 @@ private:
     uint32_t attributeTex1offset    = ~0u;
     uint32_t attributeTangentOffset = ~0u;
 
+    SemanticLodPolicy semanticPolicy;
+    bool              hasSemanticLodPolicy = false;
 
     std::vector<uint8_t>   groupData;
     std::vector<GroupInfo> groupInfos;
@@ -695,6 +724,11 @@ private:
   };
 
   size_t m_activeGeometryCount = 0;
+
+  std::vector<SemanticLodPolicy> m_semanticMeshPolicies;
+  std::unordered_map<uint64_t, SemanticLodPolicy> m_semanticNodePolicies;
+  uint64_t m_semanticLodFingerprint = 0;
+  std::filesystem::path m_semanticLodPath;
 
   std::vector<GeometryStorage> m_geometryStorages;
   std::vector<GeometryView>    m_geometryViews;
@@ -782,7 +816,7 @@ private:
     struct Header
     {
       uint64_t magic               = 0x006f65676e73766eULL;
-      uint32_t geoVersion          = 11;
+      uint32_t geoVersion          = 12;
       uint32_t geoStructSize       = uint32_t(sizeof(GeometryView));
       uint32_t configVersion       = SceneConfig::version;
       uint32_t configStructSize    = uint32_t(sizeof(SceneConfig));
@@ -1045,6 +1079,12 @@ private:
   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
   // 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
   void loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIndex, size_t meshIndex, const struct cgltf_data* gltf);
+
+  void loadSemanticLodPolicies();
+  const SemanticLodPolicy* findSemanticMeshPolicy(uint32_t meshIndex) const;
+  const SemanticLodPolicy* findSemanticNodePolicy(uint32_t nodeIndex, uint32_t meshIndex) const;
+  uint64_t semanticPolicyHashForMesh(uint32_t meshIndex) const;
+  void applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPolicy& policy) const;
   GltfNodeImportResult addInstancesFromNodeGLTF(const std::vector<size_t>& meshToGeometry,
                                                 const struct cgltf_data*   data,
                                                 const struct cgltf_node*   node,
