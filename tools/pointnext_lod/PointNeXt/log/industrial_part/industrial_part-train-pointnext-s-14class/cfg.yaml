@@ -1,0 +1,171 @@
+!!python/object/new:openpoints.utils.config.EasyConfig
+dictitems:
+  batch_size: 16
+  ckpt_dir: log/industrial_part\industrial_part-train-pointnext-s-14class-randomrot-8192-fast-ngpus1-seed3098-20260612-211607-LJ9creSRPPS42iAN76j9tV\checkpoint
+  criterion_args: !!python/object/new:openpoints.utils.config.EasyConfig
+    dictitems:
+      NAME: SmoothCrossEntropy
+      label_smoothing: 0.2
+  dataloader: !!python/object/new:openpoints.utils.config.EasyConfig
+    dictitems:
+      num_workers: 8
+  dataset: !!python/object/new:openpoints.utils.config.EasyConfig
+    dictitems:
+      common: !!python/object/new:openpoints.utils.config.EasyConfig
+        dictitems:
+          NAME: IndustrialPartPointCloud
+          data_dir: ../pointcloud_data_14class_direct
+      test: !!python/object/new:openpoints.utils.config.EasyConfig
+        dictitems:
+          num_points: 8192
+          split: test
+      train: !!python/object/new:openpoints.utils.config.EasyConfig
+        dictitems:
+          num_points: 8192
+          split: train
+      val: !!python/object/new:openpoints.utils.config.EasyConfig
+        dictitems:
+          num_points: 8192
+          split: test
+  datatransforms: !!python/object/new:openpoints.utils.config.EasyConfig
+    dictitems:
+      kwargs: !!python/object/new:openpoints.utils.config.EasyConfig
+        dictitems:
+          angle:
+          - 1
+          - 1
+          - 1
+          shift:
+          - 0.2
+          - 0.2
+          - 0.2
+      test:
+      - PointsToTensor
+      train:
+      - RandomRotate
+      - PointsToTensor
+      - PointCloudScaleAndTranslate
+      val:
+      - PointsToTensor
+  deterministic: false
+  dist_backend: nccl
+  dist_url: tcp://localhost:8888
+  distributed: false
+  epoch: 0
+  epochs: 100
+  exp_dir: log/industrial_part\industrial_part-train-pointnext-s-14class-randomrot-8192-fast-ngpus1-seed3098-20260612-211607-LJ9creSRPPS42iAN76j9tV
+  exp_name: pointnext-s-14class-randomrot-8192-fast
+  feature_keys: pos
+  finetune: false
+  grad_norm_clip: 1
+  ignore_index: null
+  launcher: mp
+  layer_decay: 0
+  load_path: null
+  local_rank: 0
+  log_dir: log/industrial_part\industrial_part-train-pointnext-s-14class-randomrot-8192-fast-ngpus1-seed3098-20260612-211607-LJ9creSRPPS42iAN76j9tV
+  log_path: log/industrial_part\industrial_part-train-pointnext-s-14class-randomrot-8192-fast-ngpus1-seed3098-20260612-211607-LJ9creSRPPS42iAN76j9tV\industrial_part-train-pointnext-s-14class-randomrot-8192-fast-ngpus1-seed3098-20260612-211607-LJ9creSRPPS42iAN76j9tV.log
+  logname: null
+  lr: 0.001
+  min_lr: null
+  mode: train
+  model: !!python/object/new:openpoints.utils.config.EasyConfig
+    dictitems:
+      NAME: BaseCls
+      cls_args: !!python/object/new:openpoints.utils.config.EasyConfig
+        dictitems:
+          NAME: ClsHead
+          mlps:
+          - 512
+          - 256
+          norm_args: !!python/object/new:openpoints.utils.config.EasyConfig
+            dictitems:
+              norm: bn1d
+          num_classes: 14
+      encoder_args: !!python/object/new:openpoints.utils.config.EasyConfig
+        dictitems:
+          NAME: PointNextEncoder
+          act_args: !!python/object/new:openpoints.utils.config.EasyConfig
+            dictitems:
+              act: relu
+          aggr_args: !!python/object/new:openpoints.utils.config.EasyConfig
+            dictitems:
+              feature_type: dp_fj
+              reduction: max
+          blocks:
+          - 1
+          - 1
+          - 1
+          - 1
+          - 1
+          - 1
+          conv_args: !!python/object/new:openpoints.utils.config.EasyConfig
+            dictitems:
+              order: conv-norm-act
+          expansion: 4
+          group_args: !!python/object/new:openpoints.utils.config.EasyConfig
+            dictitems:
+              NAME: ballquery
+              normalize_dp: true
+          in_channels: 3
+          norm_args: !!python/object/new:openpoints.utils.config.EasyConfig
+            dictitems:
+              norm: bn
+          nsample: 32
+          radius: 0.15
+          radius_scaling: 1.5
+          sa_layers: 2
+          sa_use_res: true
+          strides:
+          - 1
+          - 2
+          - 2
+          - 2
+          - 2
+          - 1
+          width: 32
+  mp: false
+  multiprocessing_distributed: false
+  ngpus_per_node: 1
+  num_classes: 14
+  num_points: 8192
+  optimizer: !!python/object/new:openpoints.utils.config.EasyConfig
+    dictitems:
+      NAME: adamw
+      weight_decay: 0.05
+  opts: ''
+  pretrained_path: null
+  print_freq: 10
+  rank: 0
+  resume: false
+  root_dir: log/industrial_part
+  run_dir: log/industrial_part\industrial_part-train-pointnext-s-14class-randomrot-8192-fast-ngpus1-seed3098-20260612-211607-LJ9creSRPPS42iAN76j9tV
+  run_name: industrial_part-train-pointnext-s-14class-randomrot-8192-fast-ngpus1-seed3098-20260612-211607-LJ9creSRPPS42iAN76j9tV
+  save_freq: -1
+  sched: cosine
+  sched_on_epoch: true
+  seed: 3098
+  start_epoch: 1
+  step_per_update: 1
+  sync_bn: false
+  task_name: industrial_part
+  test: false
+  use_amp: true
+  use_gpu: true
+  use_mask: false
+  use_voting: false
+  val_batch_size: 32
+  val_fn: validate
+  val_freq: 5
+  wandb: !!python/object/new:openpoints.utils.config.EasyConfig
+    dictitems:
+      project: PointNeXt-IndustrialPart-14Class-RandomRot-8192-Fast
+      tags:
+      - industrial_part
+      - train
+      - pointnext-s-14class-randomrot-8192-fast
+      - ngpus1
+      - seed3098
+      use_wandb: false
+  warmup_epochs: 0
+  world_size: 1
