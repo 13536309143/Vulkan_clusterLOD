@@ -126,11 +126,6 @@
 
 // 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
 // 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
-#define BINDINGS_RASTER_ATOMIC 9
-
-
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define BINDINGS_RENDER_TARGET 10
 
 
@@ -326,14 +321,6 @@ using namespace glm;
 #define ALLOW_VERTEX_TANGENTS 1
 #endif
 
-#ifndef USE_SW_RASTER
-
-
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
-#define USE_SW_RASTER 0
-#endif
-
 #ifndef USE_RENDER_STATS
 
 
@@ -524,18 +511,13 @@ struct Readback
 {
   uint     numRenderClusters;
 
-  uint     numRenderClustersSW;
-
   uint     numTraversalTasks;
 
   uint     numTraversedTasks;
   uint     numBlasBuilds;
   uint     numRenderedClusters;
-  uint     numRenderedClustersSW;
   uint64_t numRenderedTriangles;
-  uint64_t numRenderedTrianglesSW;
   uint64_t numRasteredTriangles;
-  uint64_t numRasteredTrianglesSW;
 
 
 #ifdef __cplusplus

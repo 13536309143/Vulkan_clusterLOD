@@ -139,69 +139,6 @@ bool intersectSize(vec4 clipMin, vec4 clipMax, float threshold, float scale)
   return any(greaterThan(rect, clipThreshold));
 }
 
-#if USE_SW_RASTER
-
-
-// 函数：projectedRectPixels。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-vec2 projectedRectPixels(vec4 clipMin, vec4 clipMax)
-{
-  return max((clipMax.xy - clipMin.xy) * 0.5 * view.viewportf.xy, vec2(0.0));
-}
-
-
-// 函数：shouldUseSwRaster。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-bool shouldUseSwRaster(BBox bbox, vec4 clipMin, vec4 clipMax, bool clipValid, uint triangleCount)
-{
-  if(!(clipValid && clipMin.z > 0.0 && clipMax.z < 1.0))
-  {
-    return false;
-  }
-
-#if USE_ADAPTIVE_SW_RASTER_ROUTING
-
-  vec2  rectPixels          = projectedRectPixels(clipMin, clipMax);
-
-  float projectedExtentPx   = max(rectPixels.x, rectPixels.y);
-
-  float projectedAreaPx     = max(rectPixels.x * rectPixels.y, 1.0);
-  float triangleCountF      = max(float(triangleCount), 1.0);
-  float triangleDensity     = triangleCountF / projectedAreaPx;
-  float avgTrianglePixels   = projectedAreaPx / triangleCountF;
-
-  float avgTriangleExtentPx = projectedExtentPx / sqrt(triangleCountF);
-
-
-  float extentThreshold     = max(build.swRasterThreshold, 1.0);
-
-  float densityThreshold    = max(build.swRasterTriangleDensityThreshold, 1e-4);
-  float maxTrianglePixels   = 1.0 / densityThreshold;
-
-  float maxTriangleExtentPx = sqrt(maxTrianglePixels);
-
-  float maxClusterAreaPx    = max(extentThreshold * extentThreshold, 1.0);
-
-  bool smallCluster   = projectedExtentPx <= extentThreshold && projectedAreaPx <= maxClusterAreaPx;
-  bool tinyTriangles  = triangleDensity >= densityThreshold
-                        && avgTrianglePixels <= maxTrianglePixels
-                        && avgTriangleExtentPx <= maxTriangleExtentPx;
-  bool enoughWork     = triangleCount >= 8u;
-
-  return smallCluster && tinyTriangles && enoughWork;
-#else
-  vec3  bboxDim      = bbox.hi - bbox.lo;
-  float bboxDiagonal = max(length(bboxDim), 1e-6);
-  float relativeSize = bbox.longestEdge / bboxDiagonal;
-
-  return !intersectSize(clipMin, clipMax, build.swRasterThreshold, relativeSize);
-#endif
-}
-#endif
-
-
 // 函数：queryWasVisible。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
 // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
@@ -328,31 +265,6 @@ void main()
     bool traverse      = testForTraversal(traversalMatrix, uniformScale, traversalMetric, errorScale);
     bool renderCluster = isValid && (!traverse || forceCluster);
 
-#if TARGETS_RASTERIZATION && USE_SW_RASTER && USE_CULLING
-#if USE_STREAMING
-    uint triangleCount = Cluster_in(streaming.resident.clusters.d[clusterID]).d.triangleCountMinusOne + 1;
-#else
-    uint triangleCount = Cluster_in(geometry.preloadedClusters.d[clusterID]).d.triangleCountMinusOne + 1;
-#endif
-
-    bool renderClusterSW = renderCluster && shouldUseSwRaster(bbox, clipMin, clipMax, clipValid, triangleCount);
-    if(renderClusterSW)
-    {
-      renderCluster = false;
-    }
-#elif TARGETS_RASTERIZATION && USE_SW_RASTER
-    bool renderClusterSW = false;
-#endif
-
-#if TARGETS_RASTERIZATION && USE_SW_RASTER
-
-    uvec4 voteClustersSW  = subgroupBallot(renderClusterSW);
-
-    uint  countClustersSW = subgroupBallotBitCount(voteClustersSW);
-    uint  offsetClustersSW = 0;
-#endif
-
-
     uvec4 voteClusters  = subgroupBallot(renderCluster);
 
     uint  countClusters = subgroupBallotBitCount(voteClusters);
@@ -362,10 +274,6 @@ void main()
     {
 
       offsetClusters = atomicAdd(buildRW.renderClusterCounter, countClusters);
-#if TARGETS_RASTERIZATION && USE_SW_RASTER
-
-      offsetClustersSW = atomicAdd(buildRW.renderClusterCounterSW, countClustersSW);
-#endif
     }
 
 
@@ -374,27 +282,10 @@ void main()
     offsetClusters += subgroupBallotExclusiveBitCount(voteClusters);
     renderCluster = renderCluster && offsetClusters < build.maxRenderClusters;
 
-#if TARGETS_RASTERIZATION && USE_SW_RASTER
-
-    offsetClustersSW = subgroupBroadcastFirst(offsetClustersSW);
-
-    offsetClustersSW += subgroupBallotExclusiveBitCount(voteClustersSW);
-    renderClusterSW = renderClusterSW && offsetClustersSW < build.maxRenderClusters;
-#endif
-
-#if TARGETS_RASTERIZATION && USE_SW_RASTER
-    if(renderCluster || renderClusterSW)
-#else
     if(renderCluster)
-#endif
     {
-#if TARGETS_RASTERIZATION && USE_SW_RASTER
-      uint writeIndex          = renderCluster ? offsetClusters : offsetClustersSW;
-      uint64s_coh writePointer = uint64s_coh(uint64_t(renderCluster ? build.renderClusterInfos : build.renderClusterInfosSW));
-#else
       uint writeIndex          = offsetClusters;
       uint64s_coh writePointer = uint64s_coh(uint64_t(build.renderClusterInfos));
-#endif
 
 #if USE_ATOMIC_LOAD_STORE
       atomicStore(writePointer.d[writeIndex], packTraversalInfo(traversalInfo), gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelease);

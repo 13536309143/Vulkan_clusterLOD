@@ -1,6 +1,6 @@
 # Vulkan Cluster LOD Renderer
 
-这是一个基于 Vulkan 的 Cluster LOD 渲染实验项目。项目从 `.gltf` / `.glb` 模型导入几何数据，在 CPU 侧构建 cluster、group 和多级 LOD 层次结构，然后在 GPU 侧通过 compute shader、mesh shader、Hi-Z、可选 streaming 和可选 software raster 路径完成遍历、剔除、排序与渲染。
+这是一个基于 Vulkan 的 Cluster LOD 渲染实验项目。项目从 `.gltf` / `.glb` 模型导入几何数据，在 CPU 侧构建 cluster、group 和多级 LOD 层次结构，然后在 GPU 侧通过 compute shader、mesh shader、Hi-Z 和可选 streaming 完成遍历、剔除、排序与渲染。
 
 项目目标不是做通用模型查看器，而是验证和调试大规模几何场景的 Cluster LOD 数据组织、运行时遍历、可见性剔除、显存驻留和流式加载策略。
 
@@ -16,7 +16,6 @@
 - 支持 Vulkan mesh shader 渲染路径，优先使用 EXT mesh shader，也可使用 NV mesh shader 路径。
 - 支持 Hi-Z、视锥/遮挡剔除、two-pass culling、primitive culling 等遍历优化。
 - 支持可选 GPU radix sort，对实例 sort key/value 做排序。
-- 支持可选 hybrid software/hardware raster 路径。
 - 提供 ImGui / ImPlot 调试界面，用于调节渲染、LOD、streaming、压缩、cache 和统计参数。
 
 ## 目录结构
@@ -250,14 +249,6 @@ streaming：
 - `--maxresidentgroups`：最大驻留 group 数。
 - `--maxframeloadrequests`：每帧最大加载请求数。
 - `--maxframeunloadrequests`：每帧最大卸载请求数。
-
-software raster：
-
-- `--swraster`：启用 compute software raster 路径。
-- `--adaptiveraster`：启用自适应 SW/HW raster routing。
-- `--swrasterdensity`：software raster triangle density 阈值。
-- `--swrasterfeedback`：启用 feedback auto-tune。
-- `--swrastertargetshare`：目标 software raster triangle share。
 
 相机和光照：
 

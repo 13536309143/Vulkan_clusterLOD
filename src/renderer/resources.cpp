@@ -619,44 +619,6 @@ void Resources::updateFramebufferRenderSizeDependent(VkCommandBuffer cmd)
     NVVK_CHECK(vkCreateImageView(m_device, &dsImageViewInfo, nullptr, &m_frameBuffer.viewDepth));
   }
 
-  {
-
-    VkImageCreateInfo imageInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-    imageInfo.imageType         = VK_IMAGE_TYPE_2D;
-    imageInfo.format            = VK_FORMAT_R64_UINT;
-    imageInfo.extent.width      = m_frameBuffer.renderSize.width;
-    imageInfo.extent.height     = m_frameBuffer.renderSize.height;
-    imageInfo.extent.depth      = 1;
-    imageInfo.mipLevels         = 1;
-    imageInfo.arrayLayers       = 1;
-    imageInfo.samples           = samplesUsed;
-    imageInfo.tiling            = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.flags             = 0;
-    imageInfo.initialLayout     = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-    VkImageViewCreateInfo imageViewInfo           = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    imageViewInfo.viewType                        = VK_IMAGE_VIEW_TYPE_2D;
-    imageViewInfo.format                          = imageInfo.format;
-    imageViewInfo.components.r                    = VK_COMPONENT_SWIZZLE_R;
-    imageViewInfo.components.g                    = VK_COMPONENT_SWIZZLE_G;
-    imageViewInfo.components.b                    = VK_COMPONENT_SWIZZLE_B;
-    imageViewInfo.components.a                    = VK_COMPONENT_SWIZZLE_A;
-    imageViewInfo.flags                           = 0;
-    imageViewInfo.subresourceRange.levelCount     = 1;
-    imageViewInfo.subresourceRange.baseMipLevel   = 0;
-    imageViewInfo.subresourceRange.layerCount     = 1;
-    imageViewInfo.subresourceRange.baseArrayLayer = 0;
-    imageViewInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-
-    NVVK_CHECK(m_allocator.createImage(m_frameBuffer.imgRasterAtomic, imageInfo, imageViewInfo));
-
-    NVVK_DBG_NAME(m_frameBuffer.imgRasterAtomic.image);
-
-    NVVK_DBG_NAME(m_frameBuffer.imgRasterAtomic.descriptor.imageView);
-  }
-
-
   for(uint32_t i = 0; i < 2; i++)
   {
 
@@ -713,12 +675,6 @@ void Resources::updateFramebufferRenderSizeDependent(VkCommandBuffer cmd)
   cmdImageTransition(cmd, m_frameBuffer.imgHizFar[0], VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
   cmdImageTransition(cmd, m_frameBuffer.imgHizFar[1], VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
-  if(m_frameBuffer.imgRasterAtomic.image)
-  {
-
-    cmdImageTransition(cmd, m_frameBuffer.imgRasterAtomic, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
-  }
-
   {
     VkClearColorValue clear = {};
     clear.float32[0]        = 0.0f;
@@ -773,10 +729,6 @@ void Resources::deinitFramebufferRenderSizeDependent()
   m_allocator.destroyImage(m_frameBuffer.imgHizFar[0]);
 
   m_allocator.destroyImage(m_frameBuffer.imgHizFar[1]);
-
-  m_allocator.destroyImage(m_frameBuffer.imgRasterAtomic);
-
-
   vkDestroyImageView(m_device, m_frameBuffer.viewDepth, nullptr);
   m_frameBuffer.viewDepth = VK_NULL_HANDLE;
 

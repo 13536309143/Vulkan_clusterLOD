@@ -88,11 +88,6 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"renderclusterbits"}, &m_rendererConfig.numRenderClusterBits);
   m_info.parameterRegistry->add({"rendertraversalbits"}, &m_rendererConfig.numTraversalTaskBits);
   m_info.parameterRegistry->add({"visualize"}, &m_frameConfig.visualize);
-  m_info.parameterRegistry->add({"swraster"}, &m_rendererConfig.useComputeRaster);
-  m_info.parameterRegistry->add({"adaptiveraster"}, &m_rendererConfig.useAdaptiveRasterRouting);
-  m_info.parameterRegistry->add({"swrasterdensity"}, &m_frameConfig.swRasterTriangleDensityThreshold);
-  m_info.parameterRegistry->add({"swrasterfeedback"}, &m_frameConfig.swRasterFeedbackEnabled);
-  m_info.parameterRegistry->add({"swrastertargetshare"}, &m_frameConfig.swRasterFeedbackTargetTriangleShare);
   m_info.parameterRegistry->add({"renderstats"}, &m_rendererConfig.useRenderStats);
   m_info.parameterRegistry->add({"extmeshshader"}, &m_rendererConfig.useEXTmeshShader);
   m_info.parameterRegistry->add({"forcepreprocessmegabytes"}, (uint32_t*)&m_sceneLoaderConfig.forcePreprocessMiB);
@@ -138,8 +133,6 @@ LodClusters::LodClusters(const Info& info)
   m_frameConfig.frameConstants.time = 0.0f;
   m_frameConfig.frameConstants.deltaTime = 0.0f;
   m_frameConfig.frameConstants.lodTransitionSpeed = 1.0f;
-  m_frameConfig.swRasterThresholdEffective = m_frameConfig.swRasterThreshold;
-  m_frameConfig.swRasterTriangleDensityThresholdEffective = m_frameConfig.swRasterTriangleDensityThreshold;
   m_lastAmbientOcclusionSamples = m_frameConfig.frameConstants.ambientOcclusionSamples;
   m_sceneLoaderConfig.progressPct = &m_sceneProgress;
 }

@@ -55,6 +55,8 @@ layout(scalar, binding = BINDINGS_FRAME_UBO, set = 0) uniform frameConstantsBuff
   FrameConstants view;
 };
 
+#include "culling_mesh.inc"
+
 
 // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
 // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。

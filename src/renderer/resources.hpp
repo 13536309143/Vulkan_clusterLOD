@@ -58,15 +58,6 @@ struct FrameConfig
 
   float culledErrorScale = 2.0f;
 
-  float swRasterThreshold = 8.0f;
-
-  float swRasterTriangleDensityThreshold = 0.5f;
-  bool  swRasterFeedbackEnabled = false;
-  float swRasterFeedbackTargetTriangleShare = 0.15f;
-  float swRasterThresholdEffective = 8.0f;
-  float swRasterTriangleDensityThresholdEffective = 0.5f;
-
-
   uint32_t streamingAgeThreshold = 16;
 
 
@@ -265,9 +256,6 @@ public:
     nvvk::Image imgDepthStencil  = {};
 
     VkImageView viewDepth = VK_NULL_HANDLE;
-    nvvk::Image imgRasterAtomic = {};
-
-
     nvvk::Image imgHizFar[2] = {};
 
     VkPipelineRenderingCreateInfo pipelineRenderingInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};

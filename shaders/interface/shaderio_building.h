@@ -211,15 +211,12 @@ struct SceneBuilding
   float errorOverDistanceThreshold;
   float assemblyLodPixelThreshold;
   float culledErrorScale;
-  float swRasterThreshold;
-  float swRasterTriangleDensityThreshold;
 
   uint sharingEnabledLevels;
   uint sharingTolerantLevels;
   uint sharingPushCulled;
 
   uint renderClusterCounter;
-  uint renderClusterCounterSW;
 
   int  traversalTaskCounter;
   uint traversalInfoReadCounter;
@@ -247,14 +244,6 @@ struct SceneBuilding
   DrawMeshTasksIndirectCommandEXT indirectDrawClustersEXT;
   DrawMeshTasksIndirectCommandEXT indirectDrawClusterBoxesEXT;
   uint                            numRenderedClusters;
-
-
-  DispatchIndirectCommand indirectDrawClustersSW;
-  uint                    numRenderedClustersSW;
-
-
-  BUFFER_REF(ClusterInfos_inout) renderClusterInfosSW;
-
 
   DispatchIndirectCommand indirectDispatchBlasInsertion;
 

@@ -3,7 +3,7 @@
 // 模块定位：每帧运行时调度实现，负责配置变更合并、帧常量更新、渲染调用、后处理和时间线推进。
 // 数据流：输入是 UI/参数改变、相机状态、窗口尺寸和上一帧 回读数据；输出是当前帧 FrameConstants 与 renderer 命令流。
 // 方法说明：该文件实现“帧级状态归约”：把多个来源的可变状态规约成一次稳定的 GPU 提交，保证实验参数可追踪。
-// 正确性约束：冻结剔除或 LOD 时必须复用上一帧矩阵；SW raster feedback 只能调节 effective 阈值，不能改写用户配置基准值。
+// 正确性约束：冻结剔除或 LOD 时必须复用上一帧矩阵。
 // 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
 //==============================================================================
 // 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
@@ -17,144 +17,11 @@
 // 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
-
-// 函数：LodClusters::resetSwRasterFeedback。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-void LodClusters::resetSwRasterFeedback()
-{
-  m_swRasterFeedback.initialized            = false;
-  m_swRasterFeedback.lastBaseExtent         = m_frameConfig.swRasterThreshold;
-  m_swRasterFeedback.lastBaseDensity        = m_frameConfig.swRasterTriangleDensityThreshold;
-  m_swRasterFeedback.effectiveExtent        = m_frameConfig.swRasterThreshold;
-  m_swRasterFeedback.effectiveDensity       = m_frameConfig.swRasterTriangleDensityThreshold;
-  m_swRasterFeedback.emaSwClusterShare      = 0.0f;
-  m_swRasterFeedback.emaSwTriangleShare     = 0.0f;
-  m_swRasterFeedback.emaSwTrianglesPerCluster = 0.0f;
-
-  m_frameConfig.swRasterThresholdEffective = m_frameConfig.swRasterThreshold;
-  m_frameConfig.swRasterTriangleDensityThresholdEffective = m_frameConfig.swRasterTriangleDensityThreshold;
-}
-
-
-// 函数：LodClusters::updateSwRasterFeedback。根据最新状态刷新缓存数据、GPU 地址、描述符或统计信息。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：更新函数负责把“旧状态”推进到“当前状态”，因此要避免部分更新造成 CPU/GPU 视图不一致。
-void LodClusters::updateSwRasterFeedback()
-{
-
-  const float baseExtent  = std::max(m_frameConfig.swRasterThreshold, 1.0f);
-
-  const float baseDensity = std::max(m_frameConfig.swRasterTriangleDensityThreshold, 0.01f);
-
-  bool feedbackActive = m_renderer && m_rendererConfig.useComputeRaster && m_rendererConfig.useAdaptiveRasterRouting
-                        && m_frameConfig.swRasterFeedbackEnabled;
-
-  if(!feedbackActive)
-  {
-
-    resetSwRasterFeedback();
-    return;
-  }
-
-  if(!m_swRasterFeedback.initialized || m_swRasterFeedback.lastBaseExtent != baseExtent
-     || m_swRasterFeedback.lastBaseDensity != baseDensity)
-  {
-
-    resetSwRasterFeedback();
-    m_swRasterFeedback.initialized = true;
-  }
-
-  shaderio::Readback readback;
-
-  m_resources.getReadbackData(readback);
-
-
-  const uint64_t totalClusters  = uint64_t(readback.numRenderedClusters) + uint64_t(readback.numRenderedClustersSW);
-
-  const uint64_t totalTriangles = uint64_t(readback.numRenderedTriangles) + uint64_t(readback.numRenderedTrianglesSW);
-
-  if(totalClusters == 0 || totalTriangles == 0)
-  {
-    m_frameConfig.swRasterThresholdEffective = m_swRasterFeedback.effectiveExtent;
-    m_frameConfig.swRasterTriangleDensityThresholdEffective = m_swRasterFeedback.effectiveDensity;
-    return;
-  }
-
-  const float alpha = 0.2f;
-
-  const float swClusterShare = float(readback.numRenderedClustersSW) / float(totalClusters);
-
-  const float swTriangleShare = float(readback.numRenderedTrianglesSW) / float(totalTriangles);
-  const float swTrianglesPerCluster =
-      readback.numRenderedClustersSW ? float(readback.numRenderedTrianglesSW) / float(readback.numRenderedClustersSW) : 0.0f;
-
-  m_swRasterFeedback.emaSwClusterShare =
-      m_swRasterFeedback.emaSwClusterShare * (1.0f - alpha) + swClusterShare * alpha;
-  m_swRasterFeedback.emaSwTriangleShare =
-      m_swRasterFeedback.emaSwTriangleShare * (1.0f - alpha) + swTriangleShare * alpha;
-  m_swRasterFeedback.emaSwTrianglesPerCluster =
-      m_swRasterFeedback.emaSwTrianglesPerCluster * (1.0f - alpha) + swTrianglesPerCluster * alpha;
-
-  const bool enoughSamples = totalClusters >= 64;
-  if(enoughSamples)
-  {
-
-    const float targetTriangleShare = glm::clamp(m_frameConfig.swRasterFeedbackTargetTriangleShare, 0.02f, 0.75f);
-
-    const float deadzone            = std::max(0.015f, targetTriangleShare * 0.15f);
-    const float shareError          = m_swRasterFeedback.emaSwTriangleShare - targetTriangleShare;
-    const float stepExtent          = 0.35f;
-    const float stepDensity         = 0.04f;
-    const float highTrianglesPerCluster = std::min(float(m_sceneConfig.clusterTriangles) * 0.55f, 96.0f);
-
-    float errorScale = 0.0f;
-    if(shareError > deadzone)
-    {
-      errorScale = glm::clamp((shareError - deadzone) / std::max(1.0f - targetTriangleShare, 0.1f), 0.0f, 1.0f);
-      m_swRasterFeedback.effectiveExtent -= stepExtent * (0.35f + errorScale);
-      m_swRasterFeedback.effectiveDensity += stepDensity * (0.35f + errorScale);
-    }
-    else if(shareError < -deadzone)
-    {
-      errorScale = glm::clamp((-shareError - deadzone) / std::max(targetTriangleShare, 0.1f), 0.0f, 1.0f);
-      m_swRasterFeedback.effectiveExtent += stepExtent * (0.35f + errorScale);
-      m_swRasterFeedback.effectiveDensity -= stepDensity * (0.35f + errorScale);
-    }
-
-    if(m_swRasterFeedback.emaSwTrianglesPerCluster > highTrianglesPerCluster)
-    {
-      m_swRasterFeedback.effectiveExtent -= stepExtent * 0.5f;
-      m_swRasterFeedback.effectiveDensity += stepDensity * 0.5f;
-    }
-  }
-
-
-  const float minExtent   = std::max(1.0f, baseExtent * 0.5f);
-
-  const float maxExtent   = std::max(baseExtent * 2.0f, baseExtent + 4.0f);
-
-  const float minDensity  = std::max(0.05f, baseDensity * 0.35f);
-
-  const float maxDensity  = std::max(baseDensity * 3.0f, baseDensity + 0.75f);
-
-
-  m_swRasterFeedback.effectiveExtent  = glm::clamp(m_swRasterFeedback.effectiveExtent, minExtent, maxExtent);
-
-  m_swRasterFeedback.effectiveDensity = glm::clamp(m_swRasterFeedback.effectiveDensity, minDensity, maxDensity);
-
-  m_frameConfig.swRasterThresholdEffective = m_swRasterFeedback.effectiveExtent;
-  m_frameConfig.swRasterTriangleDensityThresholdEffective = m_swRasterFeedback.effectiveDensity;
-}
-
-
 // 函数：LodClusters::onPreRender。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
 // 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void LodClusters::onPreRender()
 {
-
-  updateSwRasterFeedback();
 
   m_profilerTimeline->frameAdvance();
 }
@@ -194,18 +61,6 @@ void LodClusters::handleChanges()
     m_rendererConfig.useShading = true;
   }
   m_rendererConfig.useDepthOnly = m_frameConfig.visualize == VISUALIZE_DEPTH_ONLY;
-
-
-  if(m_rendererConfig.useComputeRaster
-     && (!m_rendererConfig.useSeparateGroups || !m_rendererConfig.useCulling || m_rendererConfig.useShading))
-  {
-    m_rendererConfig.useComputeRaster = false;
-  }
-  if(!m_rendererConfig.useComputeRaster)
-  {
-    m_rendererConfig.useAdaptiveRasterRouting = false;
-  }
-
 
   bool frameBufferChanged = false;
   if(tweakChanged(m_tweak.supersample))
@@ -301,8 +156,6 @@ void LodClusters::handleChanges()
        || rendererCfgChanged(m_rendererConfig.useSeparateGroups)
 
        || rendererCfgChanged(m_rendererConfig.useEXTmeshShader)
-
-       || rendererCfgChanged(m_rendererConfig.useComputeRaster) || rendererCfgChanged(m_rendererConfig.useAdaptiveRasterRouting)
 
        || rendererCfgChanged(m_rendererConfig.usePrimitiveCulling)
 

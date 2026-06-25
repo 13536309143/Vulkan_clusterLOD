@@ -154,7 +154,7 @@ struct UsagePercentages
   // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
   void setupPercentages(shaderio::Readback& readback, uint64_t maxRenderClusters, uint64_t maxTraversalTasks)
   {
-    pctClusters = getUsagePct(std::max(readback.numRenderClusters, readback.numRenderClustersSW), maxRenderClusters);
+    pctClusters = getUsagePct(readback.numRenderClusters, maxRenderClusters);
 
     pctTasks    = getUsagePct(readback.numTraversalTasks, maxTraversalTasks);
   }
@@ -413,46 +413,6 @@ void LodClusters::onUIRender()
           PE::Checkbox("Use Primitive Culling", (bool*)&m_rendererConfig.usePrimitiveCulling, "Use primitive culling in NV mesh shader");
 
           ImGui::EndDisabled();
-          ImGui::BeginDisabled(!((m_frameConfig.visualize == VISUALIZE_VIS_BUFFER || m_frameConfig.visualize == VISUALIZE_DEPTH_ONLY)
-                                 && m_rendererConfig.useCulling && m_rendererConfig.useSeparateGroups));
-          PE::Checkbox("Hybrid SW/HW Raster", (bool*)&m_rendererConfig.useComputeRaster,
-                       "Split rasterization between mesh shader and compute raster for visibility/depth passes");
-
-          ImGui::BeginDisabled(!m_rendererConfig.useComputeRaster);
-          PE::Checkbox("Adaptive Routing", (bool*)&m_rendererConfig.useAdaptiveRasterRouting,
-                       "Route only small, triangle-dense clusters to compute raster using projected extent, projected area, and estimated triangle footprint");
-          PE::InputFloat("SW Max Extent", &m_frameConfig.swRasterThreshold, 1.0f, 1.0f, "%.2f", ImGuiInputTextFlags_EnterReturnsTrue,
-                         "Maximum projected cluster extent in pixels before forcing the mesh-shader path");
-
-          ImGui::BeginDisabled(!m_rendererConfig.useAdaptiveRasterRouting);
-          PE::Checkbox("Feedback Auto-Tune", &m_frameConfig.swRasterFeedbackEnabled,
-                       "Adjust the effective SW routing thresholds from previous-frame routing statistics");
-
-          ImGui::BeginDisabled(!m_frameConfig.swRasterFeedbackEnabled);
-          PE::InputFloat("SW Target Tri Share", &m_frameConfig.swRasterFeedbackTargetTriangleShare, 0.01f, 0.05f, "%.2f",
-                         ImGuiInputTextFlags_EnterReturnsTrue,
-                         "Target share of total enqueued triangles that should be routed through compute raster");
-
-          ImGui::EndDisabled();
-          PE::InputFloat("SW Min Tri Density", &m_frameConfig.swRasterTriangleDensityThreshold, 0.05f, 0.1f, "%.2f",
-                         ImGuiInputTextFlags_EnterReturnsTrue,
-                         "Minimum estimated triangles per projected pixel before a small cluster is diverted to compute raster");
-
-          PE::Text("SW Effective Extent", "%.2f", m_frameConfig.swRasterThresholdEffective);
-
-          PE::Text("SW Effective Density", "%.2f", m_frameConfig.swRasterTriangleDensityThresholdEffective);
-
-          PE::Text("SW EMA Cluster Share", "%.3f", m_swRasterFeedback.emaSwClusterShare);
-
-          PE::Text("SW EMA Tri Share", "%.3f", m_swRasterFeedback.emaSwTriangleShare);
-
-          PE::Text("SW EMA Tri/Cluster", "%.2f", m_swRasterFeedback.emaSwTrianglesPerCluster);
-
-          ImGui::EndDisabled();
-
-          ImGui::EndDisabled();
-
-          ImGui::EndDisabled();
         }
         else
         {
@@ -528,54 +488,6 @@ void LodClusters::onUIRender()
 
         ImGui::TableNextColumn();
         ImGui::Text("%s", formatMetric(readback.numRasteredTriangles).c_str());
-
-        if(m_tweak.renderer == RENDERER_RASTER_CLUSTERS_LOD && m_rendererConfig.useComputeRaster)
-        {
-
-          ImGui::TableNextRow();
-
-          ImGui::TableNextColumn();
-
-          ImGui::Text("Enqueued Clusters SW");
-
-          ImGui::TableNextColumn();
-          ImGui::Text("%s", formatMetric(readback.numRenderedClustersSW).c_str());
-
-          ImGui::TableNextRow();
-
-          ImGui::TableNextColumn();
-
-          ImGui::Text("Enqueued Triangles SW");
-
-          ImGui::TableNextColumn();
-          ImGui::Text("%s", formatMetric(readback.numRenderedTrianglesSW).c_str());
-
-          ImGui::TableNextRow();
-
-          ImGui::TableNextColumn();
-
-          ImGui::Text("Enqueued Tri/Cluster SW");
-
-          ImGui::TableNextColumn();
-          if(readback.numRenderedClustersSW > 0)
-          {
-            ImGui::Text("%.1f", float(readback.numRenderedTrianglesSW) / float(readback.numRenderedClustersSW));
-          }
-          else
-          {
-
-            ImGui::Text("N/A");
-          }
-
-          ImGui::TableNextRow();
-
-          ImGui::TableNextColumn();
-
-          ImGui::Text("Rastered Triangles SW");
-
-          ImGui::TableNextColumn();
-          ImGui::Text("%s", formatMetric(readback.numRasteredTrianglesSW).c_str());
-        }
 
         ImGui::EndTable();
       }
@@ -1497,12 +1409,6 @@ void LodClusters::onUIRender()
             rowBool("Separate groups", m_rendererConfig.useSeparateGroups);
             rowBool("Instance sorting", m_rendererConfig.useSorting);
             rowBool("Render stats", m_rendererConfig.useRenderStats);
-            rowBool("Compute raster", m_rendererConfig.useComputeRaster);
-            rowBool("Adaptive raster", m_rendererConfig.useAdaptiveRasterRouting);
-            rowFmt("SW max extent", "{:.2f}", m_frameConfig.swRasterThreshold);
-            rowFmt("SW effective extent", "{:.2f}", m_frameConfig.swRasterThresholdEffective);
-            rowFmt("SW min tri density", "{:.2f}", m_frameConfig.swRasterTriangleDensityThreshold);
-            rowFmt("SW effective density", "{:.2f}", m_frameConfig.swRasterTriangleDensityThresholdEffective);
             ImGui::EndTable();
           }
         }

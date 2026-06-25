@@ -72,7 +72,6 @@ private:
     shaderc::SpvCompilationResult computeTraversalRun;
     shaderc::SpvCompilationResult computeTraversalGroups;
     shaderc::SpvCompilationResult computeBuildSetup;
-    shaderc::SpvCompilationResult computeRaster;
   };
 
 
@@ -89,7 +88,6 @@ private:
     VkPipeline computeTraversalRun     = nullptr;
     VkPipeline computeTraversalGroups  = nullptr;
     VkPipeline computeBuildSetup       = nullptr;
-    VkPipeline computeRaster           = nullptr;
   };
   Shaders            m_shaders;
   Pipelines          m_pipelines;
@@ -110,13 +108,6 @@ private:
 // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene, const RendererConfig& config)
 {
-
-  if(config.useComputeRaster && (config.useShading || !config.useSeparateGroups || !config.useCulling))
-  {
-
-    LOGW("Hybrid SW/HW raster requires:\n  visualize == visibility buffer or depth only\n  separate groups on\n  culling on\n\n");
-    return false;
-  }
 
   if(!initBasicShaders(res, rscene, config))
   {
@@ -171,16 +162,12 @@ bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene,
   options.AddMacroDefinition("ALLOW_VERTEX_TEXCOORDS", rscene.scene->m_hasVertexTexCoord0 ? "1" : "0");
 
 
-  options.AddMacroDefinition("ALLOW_SHADING", config.useShading && !config.useComputeRaster ? "1" : "0");
+  options.AddMacroDefinition("ALLOW_SHADING", config.useShading ? "1" : "0");
 
 
   options.AddMacroDefinition("USE_DEPTH_ONLY", !config.useShading && config.useDepthOnly ? "1" : "0");
 
   options.AddMacroDefinition("DEBUG_VISUALIZATION", config.useDebugVisualization && res.m_supportsBarycentrics ? "1" : "0");
-
-  options.AddMacroDefinition("USE_SW_RASTER", config.useComputeRaster ? "1" : "0");
-
-  options.AddMacroDefinition("USE_ADAPTIVE_SW_RASTER_ROUTING", config.useComputeRaster && config.useAdaptiveRasterRouting ? "1" : "0");
 
   options.AddMacroDefinition("USE_TWO_SIDED", rscene.scene->m_hasTwoSided && !config.forceTwoSided ? "1" : "0");
 
@@ -202,12 +189,6 @@ bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene,
     res.compileShader(m_shaders.computeTraversalRun, VK_SHADER_STAGE_COMPUTE_BIT, "traversal/traversal_run.comp.glsl", &options);
 
     res.compileShader(m_shaders.computeBuildSetup, VK_SHADER_STAGE_COMPUTE_BIT, "build/build_setup.comp.glsl", &options);
-
-  if(config.useComputeRaster)
-  {
-
-    res.compileShader(m_shaders.computeRaster, VK_SHADER_STAGE_COMPUTE_BIT, "render/SWclusters.comp.glsl", &options);
-  }
 
   if(config.useSeparateGroups)
   {
@@ -267,8 +248,6 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     m_sceneBuildShaderio.indirectDispatchGroups.gridZ  = 1;
     m_sceneBuildShaderio.indirectDrawClustersEXT.gridZ = 1;
     m_sceneBuildShaderio.indirectDrawClustersNV.first  = 0;
-    m_sceneBuildShaderio.indirectDrawClustersSW.gridY  = 1;
-    m_sceneBuildShaderio.indirectDrawClustersSW.gridZ  = 1;
 
     if(m_sceneBuildShaderio.numAssemblyNodes)
     {
@@ -289,11 +268,6 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     BufferRanges mem = {};
 
     m_sceneBuildShaderio.renderClusterInfos = mem.append(sizeof(shaderio::ClusterInfo) * m_sceneBuildShaderio.maxRenderClusters, 8);
-
-    if(config.useComputeRaster)
-    {
-      m_sceneBuildShaderio.renderClusterInfosSW = mem.append(sizeof(shaderio::ClusterInfo) * m_sceneBuildShaderio.maxRenderClusters, 8);
-    }
 
     if(config.useSorting)
     {
@@ -323,10 +297,6 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     if(config.useSeparateGroups)
     {
       m_sceneBuildShaderio.traversalGroupInfos += m_sceneDataBuffer.address;
-    }
-    if(config.useComputeRaster)
-    {
-      m_sceneBuildShaderio.renderClusterInfosSW += m_sceneDataBuffer.address;
     }
 
     if(config.useTwoPassCulling && config.useCulling)
@@ -371,7 +341,6 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
 
     bindings.addBinding(BINDINGS_HIZ_TEX, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, config.useCulling && config.useTwoPassCulling ? 2 : 1, m_stageFlags);
 
-    bindings.addBinding(BINDINGS_RASTER_ATOMIC, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, m_stageFlags);
     if(rscene.useStreaming)
     {
 
@@ -399,7 +368,6 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     {
       writeSets.append(m_dsetPack.makeWrite(BINDINGS_HIZ_TEX, 0, 1), &res.m_hizUpdate[1].farImageInfo);
     }
-    writeSets.append(m_dsetPack.makeWrite(BINDINGS_RASTER_ATOMIC), &res.m_frameBuffer.imgRasterAtomic);
     if(rscene.useStreaming)
     {
       writeSets.append(m_dsetPack.makeWrite(BINDINGS_STREAMING_SSBO), rscene.sceneStreaming.getShaderStreamingBuffer());
@@ -422,13 +390,6 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
     {
         state.rasterizationState.cullMode = VK_CULL_MODE_NONE;
     }
-    if (config.useComputeRaster && false)
-    {
-        state.depthStencilState.depthWriteEnable = VK_FALSE;
-        state.depthStencilState.depthTestEnable = VK_FALSE;
-        state.depthStencilState.depthCompareOp = VK_COMPARE_OP_ALWAYS;
-    }
-
     graphicsGen.addShader(VK_SHADER_STAGE_MESH_BIT_NV, "main", nvvkglsl::GlslCompiler::getSpirvData(m_shaders.graphicsMesh));
 
 
@@ -478,14 +439,6 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
 
     vkCreateComputePipelines(res.m_device, nullptr, 1, &compInfo, nullptr, &m_pipelines.computeTraversalRun);
 
-    if(config.useComputeRaster)
-    {
-
-      shaderInfo = nvvkglsl::GlslCompiler::makeShaderModuleCreateInfo(m_shaders.computeRaster);
-
-      vkCreateComputePipelines(res.m_device, nullptr, 1, &compInfo, nullptr, &m_pipelines.computeRaster);
-    }
-
     if(config.useSeparateGroups)
     {
 
@@ -530,8 +483,6 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
   m_sceneBuildShaderio.cullViewProjMatrix     = frame.cullViewProjMatrix;
   m_sceneBuildShaderio.cullViewProjMatrixLast = frame.cullViewProjMatrixLast;
   m_sceneBuildShaderio.frameIndex = m_frameIndex;
-  m_sceneBuildShaderio.swRasterThreshold = frame.swRasterThresholdEffective;
-  m_sceneBuildShaderio.swRasterTriangleDensityThreshold = frame.swRasterTriangleDensityThresholdEffective;
 
   vkCmdUpdateBuffer(cmd, res.m_commonBuffers.frameConstants.buffer, 0, sizeof(shaderio::FrameConstants), (const uint32_t*)&frame.frameConstants);
   vkCmdUpdateBuffer(cmd, m_sceneBuildBuffer.buffer, 0, sizeof(shaderio::SceneBuilding), (const uint32_t*)&m_sceneBuildShaderio);
@@ -540,23 +491,6 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
 
 
   vkCmdFillBuffer(cmd, m_sceneTraversalBuffer.buffer, 0, m_sceneTraversalBuffer.bufferSize, ~0);
-
-  if(m_config.useComputeRaster)
-  {
-    VkClearColorValue clearValue;
-    clearValue.uint32[0] = 0u;
-    clearValue.uint32[1] = 0u;
-    clearValue.uint32[2] = 0u;
-    clearValue.uint32[3] = 0u;
-
-    VkImageSubresourceRange subResource = {};
-    subResource.aspectMask              = VK_IMAGE_ASPECT_COLOR_BIT;
-    subResource.levelCount              = 1;
-    subResource.layerCount              = 1;
-
-
-    vkCmdClearColorImage(cmd, res.m_frameBuffer.imgRasterAtomic.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &subResource);
-  }
 
   if(rscene.useStreaming)
   {
@@ -705,18 +639,6 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
 
        auto timerSection = profiler.cmdFrameSection(cmd, "Draw");
 
-      if(m_config.useComputeRaster)
-      {
-
-        auto timerSection = profiler.cmdFrameSection(cmd, "SW-Raster");
-
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelines.computeRaster);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, m_dsetPack.getSetPtr(), 0, nullptr);
-
-        vkCmdDispatchIndirect(cmd, m_sceneBuildBuffer.buffer, offsetof(shaderio::SceneBuilding, indirectDrawClustersSW));
-      }
-
-
       VkAttachmentLoadOp op = pass == 1 ? VK_ATTACHMENT_LOAD_OP_LOAD : (m_config.useShading ? VK_ATTACHMENT_LOAD_OP_DONT_CARE : VK_ATTACHMENT_LOAD_OP_CLEAR);
 
       res.cmdBeginRendering(cmd, false, op, op);
@@ -742,17 +664,6 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
         {
           vkCmdDrawMeshTasksIndirectNV(cmd, m_sceneBuildBuffer.buffer, offsetof(shaderio::SceneBuilding, indirectDrawClustersNV), 1, 0);
         }
-      }
-
-      if(m_config.useComputeRaster)
-      {
-        VkMemoryBarrier memBarrier = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
-        memBarrier.dstAccessMask   = VK_ACCESS_SHADER_READ_BIT;
-        memBarrier.srcAccessMask   = VK_ACCESS_SHADER_WRITE_BIT;
-
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 1, &memBarrier, 0, 0, 0, nullptr);
-
-        writeAtomicRaster(cmd);
       }
 
       if(frame.showClusterBboxes)
@@ -817,23 +728,20 @@ void RendererRasterClustersLod::updatedFrameBuffer(Resources& res, RenderScene& 
   vkDeviceWaitIdle(res.m_device);
 
 
-  VkWriteDescriptorSet writes[3];
+  VkWriteDescriptorSet writes[2];
 
-  writes[0] = m_dsetPack.makeWrite(BINDINGS_RASTER_ATOMIC);
-  writes[0].pImageInfo = &res.m_frameBuffer.imgRasterAtomic.descriptor;
-
-  writes[1] = m_dsetPack.makeWrite(BINDINGS_HIZ_TEX, 0, 0);
-  writes[1].pImageInfo = &res.m_hizUpdate[0].farImageInfo;
+  writes[0] = m_dsetPack.makeWrite(BINDINGS_HIZ_TEX, 0, 0);
+  writes[0].pImageInfo = &res.m_hizUpdate[0].farImageInfo;
 
   if(m_config.useCulling && m_config.useTwoPassCulling)
   {
 
-    writes[2]            = m_dsetPack.makeWrite(BINDINGS_HIZ_TEX, 0, 1);
-    writes[2].pImageInfo = &res.m_hizUpdate[1].farImageInfo;
+    writes[1]            = m_dsetPack.makeWrite(BINDINGS_HIZ_TEX, 0, 1);
+    writes[1].pImageInfo = &res.m_hizUpdate[1].farImageInfo;
   }
 
 
-  vkUpdateDescriptorSets(res.m_device, m_config.useCulling && m_config.useTwoPassCulling ? 3 : 2, writes, 0, nullptr);
+  vkUpdateDescriptorSets(res.m_device, m_config.useCulling && m_config.useTwoPassCulling ? 2 : 1, writes, 0, nullptr);
 
   Renderer::updatedFrameBuffer(res, rscene);
 }

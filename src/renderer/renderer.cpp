@@ -145,8 +145,6 @@ bool Renderer::initBasicShaders(Resources& res, RenderScene& rscene, const Rende
 
   res.compileShader(m_basicShaders.fullScreenBackgroundFragShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/fullscreen_background.frag.glsl");
 
-  res.compileShader(m_basicShaders.fullscreenAtomicRasterFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "post/fullscreen_atomic.frag.glsl");
-
   res.compileShader(m_basicShaders.renderInstanceBboxesMeshShader, VK_SHADER_STAGE_MESH_BIT_NV,"debug/render_instance_bbox.mesh.glsl", &options);
 
   res.compileShader(m_basicShaders.renderInstanceBboxesFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "debug/render_instance_bbox.frag.glsl");
@@ -245,7 +243,6 @@ void Renderer::updateBasicDescriptors(Resources& res, RenderScene& rscene, const
   nvvk::WriteSetContainer writeSets;
   writeSets.append(m_basicDset.makeWrite(BINDINGS_FRAME_UBO), res.m_commonBuffers.frameConstants);
   writeSets.append(m_basicDset.makeWrite(BINDINGS_READBACK_SSBO), res.m_commonBuffers.readBack);
-  writeSets.append(m_basicDset.makeWrite(BINDINGS_RASTER_ATOMIC), res.m_frameBuffer.imgRasterAtomic.descriptor);
   writeSets.append(m_basicDset.makeWrite(BINDINGS_GEOMETRIES_SSBO), rscene.getShaderGeometriesBuffer());
   writeSets.append(m_basicDset.makeWrite(BINDINGS_RENDERINSTANCES_SSBO), m_renderInstanceBuffer);
   if(sceneBuildBuffer)
@@ -272,8 +269,6 @@ void Renderer::initBasicPipelines(Resources& res, RenderScene& rscene, const Ren
   bindings.addBinding(BINDINGS_FRAME_UBO, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, m_basicShaderFlags);
 
   bindings.addBinding(BINDINGS_READBACK_SSBO, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, m_basicShaderFlags);
-
-  bindings.addBinding(BINDINGS_RASTER_ATOMIC, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, m_basicShaderFlags);
 
   bindings.addBinding(BINDINGS_GEOMETRIES_SSBO, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, m_basicShaderFlags);
 
@@ -322,12 +317,6 @@ void Renderer::initBasicPipelines(Resources& res, RenderScene& rscene, const Ren
   graphicsGen.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, "main",nvvkglsl::GlslCompiler::getSpirvData(m_basicShaders.fullScreenBackgroundFragShader));
 
   graphicsGen.createGraphicsPipeline(res.m_device, nullptr, state, &m_basicPipelines.background);
-
-  graphicsGen.clearShaders();
-  graphicsGen.addShader(VK_SHADER_STAGE_VERTEX_BIT, "main",nvvkglsl::GlslCompiler::getSpirvData(m_basicShaders.fullScreenVertexShader));
-  graphicsGen.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, "main",nvvkglsl::GlslCompiler::getSpirvData(m_basicShaders.fullscreenAtomicRasterFragmentShader));
-
-  graphicsGen.createGraphicsPipeline(res.m_device, nullptr, state, &m_basicPipelines.atomicRaster);
 }
 
 
@@ -377,22 +366,6 @@ void Renderer::renderClusterBboxes(VkCommandBuffer cmd, nvvk::Buffer sceneBuildB
                                  offsetof(shaderio::SceneBuilding, indirectDrawClusterBoxesNV), 1, 0);
   }
 }
-
-
-// 函数：Renderer::writeAtomicRaster。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
-void Renderer::writeAtomicRaster(VkCommandBuffer cmd)
-{
-  uint32_t dummy = 0;
-  vkCmdPushConstants(cmd, m_basicPipelineLayout, m_basicShaderFlags, 0, sizeof(uint32_t), &dummy);
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_basicPipelineLayout, 0, 1, m_basicDset.getSetPtr(), 0, nullptr);
-
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_basicPipelines.atomicRaster);
-
-  vkCmdDraw(cmd, 3, 1, 0, 0);
-}
-
 
 // 函数：Renderer::writeBackgroundSky。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。

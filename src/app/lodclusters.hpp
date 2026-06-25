@@ -355,23 +355,6 @@ private:
 
   uint32_t m_equalFrames = 0;
 
-
-  // 结构：SwRasterFeedbackState。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
-  struct SwRasterFeedbackState
-  {
-    bool  initialized = false;
-    float lastBaseExtent = 0.0f;
-    float lastBaseDensity = 0.0f;
-    float effectiveExtent = 0.0f;
-    float effectiveDensity = 0.0f;
-    float emaSwClusterShare = 0.0f;
-    float emaSwTriangleShare = 0.0f;
-    float emaSwTrianglesPerCluster = 0.0f;
-  } m_swRasterFeedback;
-
-
   // 函数：initScene。初始化本模块所需状态、资源或 GPU 侧绑定。
   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
   // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
@@ -460,18 +443,6 @@ private:
   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
   // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   void applyCameraString();
-
-
-  // 函数：resetSwRasterFeedback。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-  void resetSwRasterFeedback();
-
-
-  // 函数：updateSwRasterFeedback。根据最新状态刷新缓存数据、GPU 地址、描述符或统计信息。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：更新函数负责把“旧状态”推进到“当前状态”，因此要避免部分更新造成 CPU/GPU 视图不一致。
-  void updateSwRasterFeedback();
 
 
   // 函数：decodePickingDepth。在紧凑编码和逻辑结构之间转换，减少带宽或便于着色器访问。

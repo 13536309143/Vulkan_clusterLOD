@@ -93,8 +93,6 @@ struct RendererConfig
   bool useDebugVisualization     = true;
   bool useSeparateGroups         = true;
   bool useEXTmeshShader          = false;
-  bool useComputeRaster          = false;
-  bool useAdaptiveRasterRouting  = false;
   bool usePrimitiveCulling       = false;
   bool useDepthOnly              = false;
 
@@ -186,12 +184,6 @@ protected:
   void updateBasicDescriptors(Resources& res, RenderScene& scene, const nvvk::Buffer* sceneBuildBuffer = nullptr);
 
 
-  // 函数：writeAtomicRaster。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
-  void writeAtomicRaster(VkCommandBuffer cmd);
-
-
   // 函数：writeBackgroundSky。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
   // 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
@@ -218,7 +210,6 @@ protected:
     shaderc::SpvCompilationResult fullScreenVertexShader;
     shaderc::SpvCompilationResult fullScreenWriteDepthFragShader;
     shaderc::SpvCompilationResult fullScreenBackgroundFragShader;
-    shaderc::SpvCompilationResult fullscreenAtomicRasterFragmentShader;
     shaderc::SpvCompilationResult renderInstanceBboxesFragmentShader;
     shaderc::SpvCompilationResult renderInstanceBboxesMeshShader;
     shaderc::SpvCompilationResult renderClusterBboxesMeshShader;
@@ -233,7 +224,6 @@ protected:
   {
     VkPipeline writeDepth{};
     VkPipeline background{};
-    VkPipeline atomicRaster{};
     VkPipeline renderInstanceBboxes{};
     VkPipeline renderClusterBboxes{};
   };

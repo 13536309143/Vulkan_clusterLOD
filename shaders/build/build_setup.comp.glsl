@@ -118,7 +118,6 @@ void setupSecondPass()
   buildRW.traversalTaskCounter = 0;
   buildRW.traversalGroupCounter = 0;
   buildRW.renderClusterCounter = 0;
-  buildRW.renderClusterCounterSW = 0;
   buildRW.traversalInfoReadCounter = 0;
 }
 #endif
@@ -140,75 +139,7 @@ void main()
 
     buildRW.traversalInfoWriteCounter = uint(traversalTaskCounter);
   }
-#if TARGETS_RASTERIZATION && USE_SW_RASTER
-  else if (push.setup == BUILD_SETUP_DRAW)
-  {
-
-    uint renderClusterCounter   = buildRW.renderClusterCounter;
-    uint renderClusterCounterSW = buildRW.renderClusterCounterSW;
-
-
-    uint numRenderedClusters   = min(renderClusterCounter,   build.maxRenderClusters);
-
-    uint numRenderedClustersSW = min(renderClusterCounterSW, build.maxRenderClusters);
-
-  #if USE_EXT_MESH_SHADER
-
-    uvec3 grid = fit16bitLaunchGrid(numRenderedClusters);
-    buildRW.indirectDrawClustersEXT.gridX = grid.x;
-    buildRW.indirectDrawClustersEXT.gridY = grid.y;
-    buildRW.indirectDrawClustersEXT.gridZ = grid.z;
-
-    grid = fit16bitLaunchGrid((numRenderedClusters + MESHSHADER_BBOX_COUNT - 1) / MESHSHADER_BBOX_COUNT);
-    buildRW.indirectDrawClusterBoxesEXT.gridX = grid.x;
-    buildRW.indirectDrawClusterBoxesEXT.gridY = grid.y;
-    buildRW.indirectDrawClusterBoxesEXT.gridZ = grid.z;
-  #else
-    buildRW.indirectDrawClustersNV.count = numRenderedClusters;
-    buildRW.indirectDrawClustersNV.first = 0;
-
-    buildRW.indirectDrawClusterBoxesNV.count = (numRenderedClusters + MESHSHADER_BBOX_COUNT - 1) / MESHSHADER_BBOX_COUNT;
-    buildRW.indirectDrawClusterBoxesNV.first = 0;
-  #endif
-    buildRW.numRenderedClusters = numRenderedClusters;
-
-  #if USE_16BIT_DISPATCH
-
-    uvec3 grid = fit16bitLaunchGrid(numRenderedClustersSW);
-    buildRW.indirectDrawClustersSW.gridX = grid.x;
-    buildRW.indirectDrawClustersSW.gridY = grid.y;
-    buildRW.indirectDrawClustersSW.gridZ = grid.z;
-  #else
-    buildRW.indirectDrawClustersSW.gridX = numRenderedClustersSW;
-  #endif
-    buildRW.numRenderedClustersSW = numRenderedClustersSW;
-
-
-    atomicMax(readback.numRenderClusters, renderClusterCounter);
-
-    atomicMax(readback.numRenderClustersSW, renderClusterCounterSW);
-  #if USE_SEPARATE_GROUPS
-
-    atomicMax(readback.numTraversalTasks, max(buildRW.traversalInfoWriteCounter, buildRW.traversalGroupCounter));
-  #else
-
-
-    atomicMax(readback.numTraversalTasks, buildRW.traversalInfoWriteCounter);
-  #endif
-
-  #if USE_RENDER_STATS
-
-
-    readback.numRenderedClusters   += numRenderedClusters;
-    readback.numRenderedClustersSW += numRenderedClustersSW;
-    readback.numTraversedTasks     += buildRW.traversalInfoWriteCounter;
-  #endif
-  #if USE_TWO_PASS_CULLING
-
-    setupSecondPass();
-  #endif
-  }
-#elif TARGETS_RASTERIZATION
+#if TARGETS_RASTERIZATION
   else if (push.setup == BUILD_SETUP_DRAW)
   {
 

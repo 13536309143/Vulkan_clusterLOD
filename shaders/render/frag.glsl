@@ -22,10 +22,6 @@
 #extension GL_EXT_fragment_shader_barycentric : enable
 #endif
 
-#if USE_SW_RASTER
-#extension GL_EXT_shader_image_int64 : enable
-#endif
-
 
 // 依赖说明：引入共享布局、剔除、着色或阶段间复用的着色器片段。
 // 这些 include 共同决定本文件能访问的结构布局、数学辅助函数和编译期宏。
@@ -76,13 +72,6 @@ layout(scalar, binding = BINDINGS_STREAMING_UBO, set = 0) uniform streamingBuffe
 layout(scalar, binding = BINDINGS_STREAMING_SSBO, set = 0) buffer streamingBufferRW { SceneStreaming streamingRW; };
 #endif
 
-#if USE_SW_RASTER
-
-
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
-layout(set = 0, binding = BINDINGS_RASTER_ATOMIC, r64ui) uniform u64image2D imgRasterAtomic;
-#endif
 #include "attribute_encoding.h"
 #include "render_shading.glsl"
 
@@ -107,15 +96,9 @@ layout(location = 3) pervertexEXT in Interpolants2 {
 } INBARY[];
 #endif
 
-#if !USE_SW_RASTER
-
-
 // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
 // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(location = 0, index = 0) out vec4 out_Color;
-#else
-vec4 out_Color;
-#endif
 
 
 // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
@@ -296,14 +279,4 @@ void main()
     atomicMax(readback.instanceId, packPickingValue(IN.instanceID, gl_FragCoord.z));
   }
 
-#if USE_SW_RASTER
-  {
-
-
-    uint64_t u64 = packUint2x32(uvec2(packUnorm4x8(out_Color), floatBitsToUint(gl_FragCoord.z)));
-
-
-    imageAtomicMax(imgRasterAtomic, ivec2(gl_FragCoord.xy), u64);
-  }
-#endif
 }
