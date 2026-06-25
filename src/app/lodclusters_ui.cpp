@@ -411,10 +411,6 @@ void LodClusters::onUIRender()
                        "Use two pass culling in rasterization, otherwise uses only last frame's hiz");
 
           ImGui::EndDisabled();
-          ImGui::BeginDisabled(!(!m_rendererConfig.useEXTmeshShader && m_rendererConfig.useCulling && m_resources.m_supportsMeshShaderNV));
-          PE::Checkbox("Use Primitive Culling", (bool*)&m_rendererConfig.usePrimitiveCulling, "Use primitive culling in NV mesh shader");
-
-          ImGui::EndDisabled();
         }
         else
         {
@@ -481,16 +477,6 @@ void LodClusters::onUIRender()
 
           ImGui::Text("N/A");
         }
-
-        ImGui::TableNextRow();
-
-        ImGui::TableNextColumn();
-
-        ImGui::Text("Rastered Triangles");
-
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", formatMetric(readback.numRasteredTriangles).c_str());
-
         ImGui::EndTable();
       }
     }
@@ -1407,7 +1393,6 @@ void LodClusters::onUIRender()
             rowBool("Freeze LOD", m_frameConfig.freezeLoD);
             rowBool("Culling", m_rendererConfig.useCulling);
             rowBool("Two-pass culling", m_rendererConfig.useTwoPassCulling);
-            rowBool("Primitive culling", m_rendererConfig.usePrimitiveCulling);
             rowBool("Separate groups", m_rendererConfig.useSeparateGroups);
             rowBool("Instance sorting", m_rendererConfig.useSorting);
             rowBool("Render stats", m_rendererConfig.useRenderStats);

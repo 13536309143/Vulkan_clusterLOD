@@ -14,7 +14,7 @@
 - 支持 processing-only 模式，用于提前生成 cache。
 - 支持 preload 和 streaming 两种几何驻留模式。
 - 支持 Vulkan mesh shader 渲染路径，优先使用 EXT mesh shader，也可使用 NV mesh shader 路径。
-- 支持 Hi-Z、视锥/遮挡剔除、two-pass culling、primitive culling 等遍历优化。
+- 支持 Hi-Z、视锥/遮挡剔除、two-pass culling 等遍历优化。
 - 支持可选 GPU radix sort，对实例 sort key/value 做排序。
 - 提供 ImGui / ImPlot 调试界面，用于调节渲染、LOD、streaming、压缩、cache 和统计参数。
 
@@ -230,7 +230,6 @@ cache 和预处理：
 - `--visualize`：选择可视化模式。
 - `--culling`：启用视锥和遮挡剔除。
 - `--twopassculling`：启用 two-pass culling。
-- `--primitiveculling`：在 NV mesh shader 路径启用 primitive culling。
 - `--forcedinvisculling`：强制 invisible culling。
 - `--separategroups`：使用 separate groups kernel。
 - `--instancesorting`：启用 instance sorting。

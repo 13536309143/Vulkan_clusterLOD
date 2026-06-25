@@ -93,7 +93,6 @@ struct RendererConfig
   bool useDebugVisualization     = true;
   bool useSeparateGroups         = true;
   bool useEXTmeshShader          = false;
-  bool usePrimitiveCulling       = false;
   bool useDepthOnly              = false;
 
   uint32_t numRenderClusterBits = 22;

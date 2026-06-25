@@ -29,16 +29,6 @@
 // 这些 include 共同决定本文件能访问的结构布局、数学辅助函数和编译期宏。
 #include "shaderio.h"
 
-#if USE_PRIMITIVE_CULLING && (USE_EXT_MESH_SHADER || !USE_CULLING)
-#undef USE_PRIMITIVE_CULLING
-
-
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
-#define USE_PRIMITIVE_CULLING 0
-#endif
-
-
 // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
 // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(push_constant) uniform pushData
@@ -169,7 +159,7 @@ layout(triangles) out;
 const uint MESHLET_VERTEX_ITERATIONS = ((CLUSTER_VERTEX_COUNT + MESHSHADER_WORKGROUP_SIZE - 1) / MESHSHADER_WORKGROUP_SIZE);
 const uint MESHLET_TRIANGLE_ITERATIONS = ((CLUSTER_TRIANGLE_COUNT + MESHSHADER_WORKGROUP_SIZE - 1) / MESHSHADER_WORKGROUP_SIZE);
 
-#if USE_PRIMITIVE_CULLING || USE_TWO_SIDED
+#if USE_TWO_SIDED
 
 
 // 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
@@ -226,7 +216,7 @@ uint workGroupID  = getWorkGroupIndexLinearized(gl_WorkGroupID);
   SetMeshOutputsEXT(vertCount, triCount);
   if (triCount == 0)
     return;
-#elif !USE_PRIMITIVE_CULLING
+#else
 
   if (gl_LocalInvocationID.x == 0) {
     gl_PrimitiveCountNV = triMax + 1;
@@ -236,9 +226,6 @@ uint workGroupID  = getWorkGroupIndexLinearized(gl_WorkGroupID);
 #if USE_RENDER_STATS
   if (gl_LocalInvocationID.x == 0) {
     atomicAdd(readback.numRenderedTriangles, uint(triMax + 1));
-  #if !USE_PRIMITIVE_CULLING
-    atomicAdd(readback.numRasteredTriangles, uint(triMax + 1));
-  #endif
   }
 #endif
 
@@ -293,7 +280,6 @@ uint workGroupID  = getWorkGroupIndexLinearized(gl_WorkGroupID);
     }
   }
 
-  uint triOutCount = 0;
   [[unroll]] for(uint i = 0; i < uint(MESHLET_TRIANGLE_ITERATIONS); i++)
   {
 
@@ -322,25 +308,8 @@ uint workGroupID  = getWorkGroupIndexLinearized(gl_WorkGroupID);
       indices.xy = indices.yx;
     }
 #endif
-#if USE_PRIMITIVE_CULLING
-
-    bool isRendered = tri <= triMax
-
-       && testTriangleHW( gl_MeshVerticesNV[indices.x].gl_Position,gl_MeshVerticesNV[indices.y].gl_Position,gl_MeshVerticesNV[indices.z].gl_Position);
-
-
-    uvec4 voteRendered = subgroupBallot(isRendered);
-
-
-    uint triOut = subgroupBallotExclusiveBitCount(voteRendered) + triOutCount;
-
-
-    triOutCount += subgroupBallotBitCount(voteRendered);
-#else
-
     bool isRendered = tri <= triMax;
     uint triOut     = tri;
-#endif
 
     if(isRendered)
     {
@@ -364,18 +333,4 @@ uint workGroupID  = getWorkGroupIndexLinearized(gl_WorkGroupID);
     #endif
     }
   }
-
-#if USE_PRIMITIVE_CULLING
-
-  if (gl_LocalInvocationID.x == 0) {
-    gl_PrimitiveCountNV = triOutCount;
-  }
-
-#if USE_RENDER_STATS
-  if (gl_LocalInvocationID.x == 0) {
-
-    atomicAdd(readback.numRasteredTriangles, triOutCount);
-  }
-#endif
-#endif
 }

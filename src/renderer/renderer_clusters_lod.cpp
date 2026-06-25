@@ -142,9 +142,6 @@ bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene,
   options.AddMacroDefinition("USE_CULLING", config.useCulling ? "1" : "0");
 
 
-  options.AddMacroDefinition("USE_PRIMITIVE_CULLING", config.useCulling && config.usePrimitiveCulling ? "1" : "0");
-
-
   options.AddMacroDefinition("USE_TWO_PASS_CULLING", config.useCulling && config.useTwoPassCulling ? "1" : "0");
 
   options.AddMacroDefinition("USE_RENDER_STATS", config.useRenderStats ? "1" : "0");

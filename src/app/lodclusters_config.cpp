@@ -76,7 +76,6 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"cullederrorscale"}, &m_frameConfig.culledErrorScale);
   m_info.parameterRegistry->add({"culling"}, &m_rendererConfig.useCulling);
 
-  m_info.parameterRegistry->add({"primitiveculling"}, &m_rendererConfig.usePrimitiveCulling);
   m_info.parameterRegistry->add({"twopassculling"}, &m_rendererConfig.useTwoPassCulling);
   m_info.parameterRegistry->add({"forcedinvisculling"}, &m_rendererConfig.useForcedInvisibleCulling);
   m_info.parameterRegistry->add({"separategroups"}, &m_rendererConfig.useSeparateGroups);

@@ -157,9 +157,6 @@ void LodClusters::handleChanges()
 
        || rendererCfgChanged(m_rendererConfig.useEXTmeshShader)
 
-       || rendererCfgChanged(m_rendererConfig.usePrimitiveCulling)
-
-
        || rendererCfgChanged(m_rendererConfig.useTwoPassCulling) || rendererCfgChanged(m_rendererConfig.useDepthOnly)
        || rendererCfgChanged(m_rendererConfig.useForcedInvisibleCulling))
     {
