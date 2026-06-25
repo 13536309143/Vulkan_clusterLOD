@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <chrono>
 #include <thread>
+#include <array>
+#include <unordered_set>
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include <implot/implot.h>
@@ -1428,6 +1430,83 @@ void LodClusters::onUIRender()
             rowFmt("Max geometry LOD levels", "{}", m_scene->m_maxLodLevelsCount);
             rowFmt("Max cluster triangles", "{}", m_scene->m_maxClusterTriangles);
             rowFmt("Max cluster vertices", "{}", m_scene->m_maxClusterVertices);
+            ImGui::EndTable();
+          }
+        }
+
+        if(m_scene && ImGui::CollapsingHeader("Semantic LOD Policy Distribution", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+          static const char* policyNames[] = {
+              "",
+              "P1 micro / uncertain",
+              "P2 repeated fastener",
+              "P3 large static bulk",
+              "P4 ordinary low detail",
+              "P5 balanced visible",
+              "P6 high-detail shape",
+              "P7 interface / fluid",
+              "P8 structural / control",
+              "P9 motion / precision",
+              "P10 critical preserve",
+          };
+
+          std::array<uint64_t, 11> instanceCounts = {};
+          std::array<std::unordered_set<uint32_t>, 11> geometrySets;
+          uint64_t semanticInstances = 0;
+
+          for(const Scene::Instance& instance : m_scene->m_instances)
+          {
+            const uint32_t flags = instance.lodPolicy;
+            if((flags & SEMANTIC_LOD_VALID_BIT) == 0)
+              continue;
+
+            const uint32_t priority = (flags >> SEMANTIC_LOD_PRIORITY_SHIFT) & SEMANTIC_LOD_PRIORITY_MASK;
+            if(priority == 0 || priority >= instanceCounts.size())
+              continue;
+
+            instanceCounts[priority]++;
+            geometrySets[priority].insert(instance.geometryID);
+            semanticInstances++;
+          }
+
+          if(semanticInstances == 0)
+          {
+            ImGui::TextWrapped("No semantic LOD policy is attached to the current scene. Generate and load *_lod_constraints.csv to populate this table.");
+          }
+          else if(ImGui::BeginTable("##SemanticLodPolicyDistribution", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
+          {
+            ImGui::TableSetupColumn("Policy", ImGuiTableColumnFlags_WidthFixed, 155.0f * ImGui::GetWindowDpiScale());
+            ImGui::TableSetupColumn("Instances", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Geometries", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Share", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            for(uint32_t priority = 1; priority <= 10; ++priority)
+            {
+              const uint64_t instances = instanceCounts[priority];
+              const uint64_t geometries = uint64_t(geometrySets[priority].size());
+              const double share = 100.0 * double(instances) / double(std::max<uint64_t>(1, semanticInstances));
+
+              ImGui::TableNextRow();
+              ImGui::TableNextColumn();
+              ImGui::TextUnformatted(policyNames[priority]);
+              ImGui::TableNextColumn();
+              ImGui::Text("%s", formatMetric(instances).c_str());
+              ImGui::TableNextColumn();
+              ImGui::Text("%s", formatMetric(geometries).c_str());
+              ImGui::TableNextColumn();
+              ImGui::Text("%.2f %%", share);
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Total semantic");
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", formatMetric(semanticInstances).c_str());
+            ImGui::TableNextColumn();
+            ImGui::Text("-");
+            ImGui::TableNextColumn();
+            ImGui::Text("100.00 %%");
             ImGui::EndTable();
           }
         }

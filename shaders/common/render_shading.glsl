@@ -87,14 +87,24 @@ vec3 semanticLodColor(uint instanceID)
 
   uint priority = (flags >> SEMANTIC_LOD_PRIORITY_SHIFT) & SEMANTIC_LOD_PRIORITY_MASK;
   if(priority <= 1)
-    return vec3(0.95, 0.12, 0.10);
+    return vec3(0.55, 0.55, 0.55);
   if(priority == 2)
-    return vec3(1.00, 0.48, 0.08);
+    return vec3(0.72, 0.44, 0.22);
   if(priority == 3)
-    return vec3(0.95, 0.82, 0.18);
+    return vec3(0.95, 0.67, 0.10);
   if(priority == 4)
-    return vec3(0.10, 0.72, 0.82);
-  return vec3(0.16, 0.35, 1.00);
+    return vec3(0.92, 0.86, 0.18);
+  if(priority == 5)
+    return vec3(0.40, 0.78, 0.22);
+  if(priority == 6)
+    return vec3(0.08, 0.72, 0.58);
+  if(priority == 7)
+    return vec3(0.10, 0.66, 0.90);
+  if(priority == 8)
+    return vec3(0.20, 0.36, 1.00);
+  if(priority == 9)
+    return vec3(0.58, 0.24, 0.92);
+  return vec3(0.95, 0.14, 0.42);
 }
 
 

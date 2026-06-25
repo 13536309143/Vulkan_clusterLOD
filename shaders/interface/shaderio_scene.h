@@ -126,7 +126,7 @@ enum ClusterAttributeBits
 #define SEMANTIC_LOD_PRESERVE_BIT 8u
 #define SEMANTIC_LOD_LOW_CONF_BIT 16u
 #define SEMANTIC_LOD_PRIORITY_SHIFT 8u
-#define SEMANTIC_LOD_PRIORITY_MASK 0x7u
+#define SEMANTIC_LOD_PRIORITY_MASK 0xFu
 
 
 // 结构：BBox。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。

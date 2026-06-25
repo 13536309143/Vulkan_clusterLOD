@@ -122,12 +122,39 @@ float parseFloat(const std::string& value, float fallback = 0.0f)
 
 uint32_t parsePriority(const std::string& value)
 {
+  std::string lower;
+  lower.reserve(value.size());
+  for(char ch : value)
+    lower.push_back(char(std::tolower(uint8_t(ch))));
+
+  if(lower.find("p5_preserve") != std::string::npos || lower.find("critical_preserve") != std::string::npos)
+    return 10;
+  if(lower.find("p4_conservative") != std::string::npos)
+    return 8;
+  if(lower.find("p3_standard") != std::string::npos)
+    return 5;
+  if(lower.find("p2_aggressive") != std::string::npos)
+    return 3;
+  if(lower.find("p1_micro") != std::string::npos)
+    return 1;
+
+  uint32_t priority = 0;
+  bool foundDigit = false;
   for(char ch : value)
   {
-    if(ch >= '1' && ch <= '5')
-      return uint32_t(ch - '0');
+    if(ch >= '0' && ch <= '9')
+    {
+      priority = priority * 10u + uint32_t(ch - '0');
+      foundDigit = true;
+    }
+    else if(foundDigit)
+    {
+      break;
+    }
   }
-  return 3;
+  if(!foundDigit)
+    return 5;
+  return std::min<uint32_t>(std::max<uint32_t>(priority, 1), 10);
 }
 
 float clampf(float value, float lo, float hi)
@@ -137,30 +164,30 @@ float clampf(float value, float lo, float hi)
 
 void derivePolicy(Scene::SemanticLodPolicy& policy)
 {
-  static const float simplifyByPriority[] = {0.38f, 0.38f, 0.45f, 0.52f, 0.62f, 0.74f};
-  static const float mergeByPriority[]    = {0.80f, 0.80f, 0.90f, 1.00f, 1.12f, 1.28f};
-  static const float featureByPriority[]  = {0.55f, 0.55f, 0.75f, 1.00f, 1.20f, 1.45f};
-  static const float protectByPriority[]  = {0.94f, 0.94f, 0.86f, 0.78f, 0.70f, 0.62f};
-  static const float criticalByPriority[] = {0.985f, 0.985f, 0.96f, 0.93f, 0.88f, 0.82f};
-  static const float softByPriority[]     = {0.45f, 0.45f, 0.65f, 1.00f, 1.30f, 1.60f};
-  static const float lockByPriority[]     = {0.10f, 0.015f, 0.045f, 0.090f, 0.160f, 0.240f};
-  static const float decayByPriority[]    = {0.025f, 0.070f, 0.055f, 0.030f, 0.018f, 0.012f};
-  static const float minByPriority[]      = {0.42f, 0.24f, 0.30f, 0.40f, 0.50f, 0.58f};
-  static const uint32_t partitionByPriority[] = {16u, 24u, 20u, 16u, 12u, 10u};
+  static const float simplifyByPriority[] = {0.50f, 0.34f, 0.40f, 0.44f, 0.48f, 0.52f, 0.58f, 0.62f, 0.66f, 0.72f, 0.82f};
+  static const float mergeByPriority[]    = {1.00f, 0.72f, 0.80f, 0.88f, 0.95f, 1.00f, 1.08f, 1.15f, 1.22f, 1.32f, 1.45f};
+  static const float featureByPriority[]  = {1.00f, 0.45f, 0.55f, 0.65f, 0.80f, 1.00f, 1.12f, 1.25f, 1.35f, 1.50f, 1.70f};
+  static const float protectByPriority[]  = {0.78f, 0.97f, 0.94f, 0.90f, 0.86f, 0.78f, 0.74f, 0.70f, 0.66f, 0.62f, 0.58f};
+  static const float criticalByPriority[] = {0.93f, 0.995f, 0.985f, 0.97f, 0.95f, 0.93f, 0.90f, 0.88f, 0.85f, 0.82f, 0.78f};
+  static const float softByPriority[]     = {1.00f, 0.35f, 0.45f, 0.60f, 0.75f, 1.00f, 1.15f, 1.30f, 1.45f, 1.65f, 1.80f};
+  static const float lockByPriority[]     = {1.00f, 0.010f, 0.018f, 0.035f, 0.060f, 0.090f, 0.120f, 0.160f, 0.190f, 0.240f, 0.300f};
+  static const float decayByPriority[]    = {0.000f, 0.080f, 0.070f, 0.060f, 0.045f, 0.030f, 0.024f, 0.018f, 0.014f, 0.010f, 0.006f};
+  static const float minByPriority[]      = {0.50f, 0.20f, 0.24f, 0.28f, 0.34f, 0.40f, 0.46f, 0.50f, 0.54f, 0.58f, 0.64f};
+  static const uint32_t partitionByPriority[] = {16u, 24u, 24u, 22u, 20u, 16u, 14u, 12u, 11u, 10u, 8u};
 
-  const uint32_t priority = std::min<uint32_t>(policy.priority, 5);
+  const uint32_t priority = std::min<uint32_t>(std::max<uint32_t>(policy.priority, 1), 10);
   policy.flags = SEMANTIC_LOD_VALID_BIT | ((priority & SEMANTIC_LOD_PRIORITY_MASK) << SEMANTIC_LOD_PRIORITY_SHIFT);
   if(policy.allowCull)
     policy.flags |= SEMANTIC_LOD_ALLOW_CULL_BIT;
-  if(priority <= 2)
+  if(priority <= 3)
     policy.flags |= SEMANTIC_LOD_AGGRESSIVE_BIT;
-  if(priority >= 5)
+  if(priority >= 8)
     policy.flags |= SEMANTIC_LOD_PRESERVE_BIT;
   if(policy.confidence > 0.0f && policy.confidence < 0.40f)
     policy.flags |= SEMANTIC_LOD_LOW_CONF_BIT;
 
   const float stableRatio = simplifyByPriority[priority];
-  policy.simplifyRatio = clampf(stableRatio * 0.80f + policy.targetRatioMid * 0.20f, 0.36f, 0.78f);
+  policy.simplifyRatio = clampf(stableRatio * 0.80f + policy.targetRatioMid * 0.20f, 0.30f, 0.82f);
   policy.errorMergeScale = mergeByPriority[priority];
   policy.featureWeightScale = featureByPriority[priority];
   policy.featureProtectThreshold = protectByPriority[priority];
@@ -178,7 +205,7 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
   }
 
   const float weight = std::max(policy.screenErrorWeight, 0.25f);
-  policy.lodErrorScale = clampf(1.0f / weight, 0.55f, 2.10f);
+  policy.lodErrorScale = clampf(1.0f / weight, 0.45f, 2.40f);
 }
 
 void mergeMeshPolicy(Scene::SemanticLodPolicy& dst, const Scene::SemanticLodPolicy& src)
@@ -360,14 +387,14 @@ void Scene::applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPol
   if(!policy.valid)
     return;
 
-  config.simplify_ratio = clampf(policy.simplifyRatio, 0.36f, 0.78f);
+  config.simplify_ratio = clampf(policy.simplifyRatio, 0.30f, 0.82f);
   config.simplify_error_merge_previous *= policy.errorMergeScale;
-  config.semantic_priority = int(std::min<uint32_t>(policy.priority, 5));
+  config.semantic_priority = int(std::min<uint32_t>(std::max<uint32_t>(policy.priority, 1), 10));
   config.semantic_confidence = policy.confidence;
-  config.feature_soft_scale = clampf(policy.featureSoftScale, 0.35f, 1.80f);
-  config.feature_hard_lock_ratio = clampf(policy.featureHardLockRatio, 0.0f, 0.30f);
+  config.feature_soft_scale = clampf(policy.featureSoftScale, 0.30f, 2.00f);
+  config.feature_hard_lock_ratio = clampf(policy.featureHardLockRatio, 0.0f, 0.35f);
   config.hierarchy_depth_decay = clampf(policy.hierarchyDepthDecay, 0.0f, 0.09f);
-  config.hierarchy_min_ratio = clampf(policy.hierarchyMinRatio, 0.20f, 0.65f);
+  config.hierarchy_min_ratio = clampf(policy.hierarchyMinRatio, 0.18f, 0.70f);
   config.partition_size = std::max<size_t>(8, std::min<size_t>(24, policy.partitionSize));
 
   if(config.feature_constraints)
@@ -377,7 +404,7 @@ void Scene::applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPol
     config.feature_critical_threshold = policy.featureCriticalThreshold;
   }
 
-  if(policy.priority <= 1)
+  if(policy.priority <= 2)
   {
     config.simplify_regularize = false;
   }

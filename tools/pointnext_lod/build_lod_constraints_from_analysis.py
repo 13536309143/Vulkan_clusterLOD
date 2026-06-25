@@ -2,7 +2,9 @@
 
 The input is produced by analyze_large_glb_parts_pointnext.py or
 analyze_gltf_parts_pointnext.py. Output keeps one row per original mesh and adds
-size-first, shape-second, semantic/detail-aware LOD policy fields.
+size-first, shape-second, semantic/detail-aware LOD policy fields. The final
+policy is a P1-P10 semantic-structural class used by the Vulkan LOD frontend and
+builder.
 """
 
 from __future__ import annotations
@@ -41,6 +43,32 @@ BULK_STATIC_TYPES = {
 CONTROL_TYPES = {
     "handles_controls",
 }
+
+P10_POLICY_TABLE = {
+    1: ("P1_micro_uncertain", 0.25, 0.08, 0.02, True, 0.40),
+    2: ("P2_repeated_fastener", 0.38, 0.16, 0.05, True, 0.55),
+    3: ("P3_large_static_bulk", 0.45, 0.22, 0.07, True, 0.65),
+    4: ("P4_ordinary_low_detail", 0.55, 0.28, 0.10, True, 0.80),
+    5: ("P5_balanced_visible", 0.65, 0.36, 0.16, False, 0.95),
+    6: ("P6_high_detail_shape", 0.74, 0.45, 0.22, False, 1.08),
+    7: ("P7_interface_fluid", 0.80, 0.52, 0.28, False, 1.18),
+    8: ("P8_structural_control", 0.84, 0.58, 0.34, False, 1.28),
+    9: ("P9_motion_precision", 0.92, 0.68, 0.42, False, 1.45),
+    10: ("P10_critical_preserve", 1.00, 0.80, 0.55, False, 1.65),
+}
+
+
+def make_p10_policy(priority: int, strategy: str) -> dict:
+    name, near, mid, far, allow_cull, screen_error_weight = P10_POLICY_TABLE[priority]
+    return {
+        "lod_priority": name,
+        "lod_strategy": strategy,
+        "target_ratio_near": near,
+        "target_ratio_mid": mid,
+        "target_ratio_far": far,
+        "allow_cull": allow_cull,
+        "screen_error_weight": screen_error_weight,
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -449,6 +477,86 @@ def lod_policy(
     }
 
 
+def refine_to_p10_policy(
+    row: dict,
+    size_rank: int,
+    detail_rank: int,
+    reliable: bool,
+    semantic: str,
+    fallback: str,
+    base_policy: dict,
+) -> dict:
+    shape = row.get("shape_hint", "")
+    predicted_class = row.get("predicted_class", "")
+
+    is_micro = size_rank <= 1
+    is_small = size_rank <= 2
+    is_large = size_rank >= 4
+    is_xlarge = size_rank >= 5
+    is_huge = size_rank >= 6
+    is_thin_or_plate = shape == "flat_plate" or fallback in {"geom_ultra_thin_sheet", "geom_thin_plate"}
+    is_simple_bulk_shape = fallback in {
+        "geom_ultra_thin_sheet",
+        "geom_thin_plate",
+        "geom_compact_block",
+        "geom_simple_irregular",
+    }
+    is_bulk_static = (
+        semantic in {"bulk_static_part", "other_part", "semantic_uncertain"}
+        and is_xlarge
+        and (is_simple_bulk_shape or is_thin_or_plate or is_huge)
+    )
+    is_fastener = semantic == "fastener_repeated"
+    is_motion_key = semantic == "motion_or_precision_part" and reliable
+    is_structural_key = semantic == "structural_key_part" and reliable
+    is_control_key = semantic == "control_or_handle" and reliable
+    is_interface_key = semantic == "fluid_or_interface_part" and reliable
+
+    if is_fastener:
+        if is_micro or not reliable:
+            return make_p10_policy(1, "micro_or_uncertain_fastener_cull_far")
+        return make_p10_policy(2, "repeated_fastener_aggressive")
+
+    if is_bulk_static:
+        if detail_rank >= 4 and not is_thin_or_plate:
+            return make_p10_policy(4, "large_static_high_detail_low_detail_constraint")
+        return make_p10_policy(3, "large_static_bulk_fast_simplify")
+
+    if is_motion_key:
+        if predicted_class in {"gears_pulleys_chains", "motors_gearmotors", "bearings_bushings_guides", "springs"} or detail_rank >= 3:
+            return make_p10_policy(10, "critical_motion_or_precision_preserve")
+        return make_p10_policy(9, "motion_precision_protect")
+
+    if is_structural_key:
+        if detail_rank >= 3 or fallback in {"geom_wire_or_rod", "geom_slender_bar", "geom_high_detail_irregular"}:
+            return make_p10_policy(8, "structural_connector_key")
+        return make_p10_policy(7, "structural_interface_connector")
+
+    if is_interface_key:
+        return make_p10_policy(7, "fluid_or_mounting_interface")
+
+    if is_control_key:
+        if is_large or detail_rank >= 3:
+            return make_p10_policy(8, "structural_control_surface")
+        return make_p10_policy(6, "visible_control_shape")
+
+    if not reliable:
+        if is_small or is_thin_or_plate:
+            return make_p10_policy(1, "uncertain_micro_or_sheet")
+        if is_xlarge:
+            return make_p10_policy(3, "uncertain_large_static_fast_simplify")
+        return make_p10_policy(4, "uncertain_ordinary_low_detail")
+
+    if detail_rank >= 4 and not is_thin_or_plate:
+        return make_p10_policy(6, "high_detail_shape")
+    if detail_rank >= 2 and not is_micro:
+        return make_p10_policy(5, "balanced_visible_part")
+    if size_rank >= 2:
+        return make_p10_policy(4, "ordinary_low_detail_fast_simplify")
+
+    return make_p10_policy(1, "micro_or_trivial_cull_far")
+
+
 def classify_row(row: dict, thresholds: dict, args: argparse.Namespace) -> dict:
     size_class, size_rank = classify_size(row, thresholds)
     confidence_class, reliable, margin = confidence_state(
@@ -457,7 +565,8 @@ def classify_row(row: dict, thresholds: dict, args: argparse.Namespace) -> dict:
     semantic = semantic_group(row.get("predicted_class", ""), reliable)
     fallback = geometry_fallback(row)
     detail_class, detail_rank = detail_level(row, thresholds)
-    policy = lod_policy(row, size_rank, detail_rank, reliable, semantic, fallback)
+    base_policy = lod_policy(row, size_rank, detail_rank, reliable, semantic, fallback)
+    policy = refine_to_p10_policy(row, size_rank, detail_rank, reliable, semantic, fallback, base_policy)
 
     small_low_conf_refined = size_rank <= 2 and not reliable
     if small_low_conf_refined:
