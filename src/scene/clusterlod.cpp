@@ -545,6 +545,10 @@ namespace lodclusters {
      if(geometry.hasSemanticLodPolicy)
      {
        applySemanticPolicyToConfig(clodInfo, geometry.semanticPolicy);
+       while((clodInfo.partition_size + clodInfo.partition_size / 3) > m_config.clusterGroupSize)
+       {
+         clodInfo.partition_size--;
+       }
        geometry.semanticLodErrorScale = geometry.semanticPolicy.lodErrorScale;
        geometry.semanticLodPolicyFlags = geometry.semanticPolicy.flags;
      }

@@ -119,6 +119,12 @@ clodConfig clodDefaultConfig(size_t max_triangles)
 	config.feature_attribute_weight = 4.0f;
 	config.feature_protect_threshold = 0.78f;
 	config.feature_critical_threshold = 0.93f;
+	config.semantic_priority = 0;
+	config.semantic_confidence = 1.0f;
+	config.feature_soft_scale = 1.0f;
+	config.feature_hard_lock_ratio = 1.0f;
+	config.hierarchy_depth_decay = 0.0f;
+	config.hierarchy_min_ratio = config.simplify_ratio;
 
 	return config;
 }
@@ -147,7 +153,9 @@ void clodBuild_iterationTask(void* iteration_context, void* output_context, size
 	for (size_t j = 0; j < groups[i].size(); ++j)
 		merged.insert(merged.end(), clusters[groups[i][j]].indices.begin(), clusters[groups[i][j]].indices.end());
 
-	size_t target_size = size_t((merged.size() / 3) * config.simplify_ratio) * 3;
+	float depth_ratio = config.simplify_ratio - std::max(0, depth - 1) * config.hierarchy_depth_decay;
+	depth_ratio = std::max(config.hierarchy_min_ratio, std::min(config.simplify_ratio, depth_ratio));
+	size_t target_size = size_t((merged.size() / 3) * depth_ratio) * 3;
 
 
 	clodBounds bounds = boundsMerge(clusters, groups[i]);

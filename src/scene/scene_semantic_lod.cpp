@@ -142,6 +142,11 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
   static const float featureByPriority[]  = {0.55f, 0.55f, 0.75f, 1.00f, 1.20f, 1.45f};
   static const float protectByPriority[]  = {0.94f, 0.94f, 0.86f, 0.78f, 0.70f, 0.62f};
   static const float criticalByPriority[] = {0.985f, 0.985f, 0.96f, 0.93f, 0.88f, 0.82f};
+  static const float softByPriority[]     = {0.45f, 0.45f, 0.65f, 1.00f, 1.30f, 1.60f};
+  static const float lockByPriority[]     = {0.10f, 0.015f, 0.045f, 0.090f, 0.160f, 0.240f};
+  static const float decayByPriority[]    = {0.025f, 0.070f, 0.055f, 0.030f, 0.018f, 0.012f};
+  static const float minByPriority[]      = {0.42f, 0.24f, 0.30f, 0.40f, 0.50f, 0.58f};
+  static const uint32_t partitionByPriority[] = {16u, 24u, 20u, 16u, 12u, 10u};
 
   const uint32_t priority = std::min<uint32_t>(policy.priority, 5);
   policy.flags = SEMANTIC_LOD_VALID_BIT | ((priority & SEMANTIC_LOD_PRIORITY_MASK) << SEMANTIC_LOD_PRIORITY_SHIFT);
@@ -160,6 +165,17 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
   policy.featureWeightScale = featureByPriority[priority];
   policy.featureProtectThreshold = protectByPriority[priority];
   policy.featureCriticalThreshold = criticalByPriority[priority];
+  policy.featureSoftScale = softByPriority[priority];
+  policy.featureHardLockRatio = lockByPriority[priority];
+  policy.hierarchyDepthDecay = decayByPriority[priority];
+  policy.hierarchyMinRatio = minByPriority[priority];
+  policy.partitionSize = partitionByPriority[priority];
+
+  if(policy.confidence > 0.0f && policy.confidence < 0.40f)
+  {
+    policy.featureHardLockRatio *= 0.65f;
+    policy.featureSoftScale *= 0.85f;
+  }
 
   const float weight = std::max(policy.screenErrorWeight, 0.25f);
   policy.lodErrorScale = clampf(1.0f / weight, 0.55f, 2.10f);
@@ -346,16 +362,24 @@ void Scene::applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPol
 
   config.simplify_ratio = clampf(policy.simplifyRatio, 0.36f, 0.78f);
   config.simplify_error_merge_previous *= policy.errorMergeScale;
+  config.semantic_priority = int(std::min<uint32_t>(policy.priority, 5));
+  config.semantic_confidence = policy.confidence;
+  config.feature_soft_scale = clampf(policy.featureSoftScale, 0.35f, 1.80f);
+  config.feature_hard_lock_ratio = clampf(policy.featureHardLockRatio, 0.0f, 0.30f);
+  config.hierarchy_depth_decay = clampf(policy.hierarchyDepthDecay, 0.0f, 0.09f);
+  config.hierarchy_min_ratio = clampf(policy.hierarchyMinRatio, 0.20f, 0.65f);
+  config.partition_size = std::max<size_t>(8, std::min<size_t>(24, policy.partitionSize));
 
-  if(policy.priority <= 1)
-  {
-    config.feature_constraints = false;
-  }
-  else if(config.feature_constraints)
+  if(config.feature_constraints)
   {
     config.feature_attribute_weight *= policy.featureWeightScale;
     config.feature_protect_threshold = policy.featureProtectThreshold;
     config.feature_critical_threshold = policy.featureCriticalThreshold;
+  }
+
+  if(policy.priority <= 1)
+  {
+    config.simplify_regularize = false;
   }
 }
 

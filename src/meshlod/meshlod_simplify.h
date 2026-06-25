@@ -47,6 +47,12 @@ struct FeatureEdgeInfo
 	unsigned int count = 0;
 };
 
+struct SemanticLockCandidate
+{
+	float score = 0.0f;
+	unsigned int vertex = 0;
+};
+
 static uint64_t featureEdgeKey(unsigned int a, unsigned int b)
 {
 	unsigned int lo = std::min(a, b);
@@ -264,6 +270,7 @@ static void analyzeFeatureConstraints(IterationContext& context)
 	std::vector<unsigned char> functional_boundary(welded_vertex_count);
 	std::vector<unsigned char> cylindrical(welded_vertex_count);
 	std::vector<unsigned char> thin_wall(welded_vertex_count);
+	std::vector<SemanticLockCandidate> lock_candidates;
 	std::vector<unsigned int> incident_count(welded_vertex_count);
 	std::vector<float> normal_sum(welded_vertex_count * 3);
 	std::vector<float> min_edge_sq(welded_vertex_count, FLT_MAX);
@@ -409,6 +416,8 @@ static void analyzeFeatureConstraints(IterationContext& context)
 			markComponentVertices(component, functional_boundary);
 	}
 
+	lock_candidates.reserve(mesh.vertex_count / 8 + 1);
+
 	for (size_t v = 0; v < mesh.vertex_count; ++v)
 	{
 		unsigned int w = original_to_weld[v];
@@ -455,20 +464,55 @@ static void analyzeFeatureConstraints(IterationContext& context)
 		if (non_manifold[w])
 			importance = 1.0f;
 
+		importance = clampFeature01(importance * std::max(0.0f, context.config.feature_soft_scale));
 		importance = clampFeature01(importance);
 		context.feature_importance[v] = importance;
 
 		if (importance >= context.config.feature_protect_threshold)
 			metrics.protected_vertices++;
-		if (non_manifold[w] || circular_hole[w] || importance >= context.config.feature_critical_threshold)
+
+		if (non_manifold[w])
 		{
 			context.feature_locks[v] = meshopt_SimplifyVertex_Protect;
 			metrics.critical_vertices++;
+		}
+		else if (circular_hole[w] || importance >= context.config.feature_critical_threshold
+		         || (context.config.semantic_priority > 0 && (functional_boundary[w] || thin_wall[w])))
+		{
+			float score = importance;
+			if (circular_hole[w])
+				score += 0.35f;
+			if (functional_boundary[w])
+				score += 0.20f;
+			if (thin_wall[w])
+				score += 0.15f;
+			if (cylindrical[w])
+				score += 0.10f;
+
+			lock_candidates.push_back({score, unsigned(v)});
 		}
 
 		uint64_t ppm = uint64_t(importance * 1000000.0f + 0.5f);
 		metrics.feature_importance_sum_ppm += ppm;
 		metrics.feature_importance_max_ppm = std::max(metrics.feature_importance_max_ppm, ppm);
+	}
+
+	size_t hard_lock_budget = size_t(float(mesh.vertex_count) * std::max(0.0f, context.config.feature_hard_lock_ratio) + 0.5f);
+	hard_lock_budget = std::max(hard_lock_budget, size_t(metrics.critical_vertices));
+	std::sort(lock_candidates.begin(), lock_candidates.end(), [](const SemanticLockCandidate& a, const SemanticLockCandidate& b) {
+		return a.score > b.score;
+	});
+
+	for (const SemanticLockCandidate& candidate : lock_candidates)
+	{
+		if (metrics.critical_vertices >= hard_lock_budget)
+			break;
+
+		if (candidate.vertex >= context.feature_locks.size() || context.feature_locks[candidate.vertex] & meshopt_SimplifyVertex_Protect)
+			continue;
+
+		context.feature_locks[candidate.vertex] = meshopt_SimplifyVertex_Protect;
+		metrics.critical_vertices++;
 	}
 
 	mesh.feature_importance = context.feature_importance.data();

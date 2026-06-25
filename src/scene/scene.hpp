@@ -688,6 +688,11 @@ public:
     float    featureWeightScale = 1.0f;
     float    featureProtectThreshold = 0.78f;
     float    featureCriticalThreshold = 0.93f;
+    float    featureSoftScale = 1.0f;
+    float    featureHardLockRatio = 0.10f;
+    float    hierarchyDepthDecay = 0.02f;
+    float    hierarchyMinRatio = 0.42f;
+    uint32_t partitionSize = 16;
     uint64_t rowHash = 0;
   };
 

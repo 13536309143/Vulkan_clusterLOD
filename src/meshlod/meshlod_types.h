@@ -55,6 +55,12 @@ struct clodConfig
 	float feature_attribute_weight;
 	float feature_protect_threshold;
 	float feature_critical_threshold;
+	int semantic_priority;
+	float semantic_confidence;
+	float feature_soft_scale;
+	float feature_hard_lock_ratio;
+	float hierarchy_depth_decay;
+	float hierarchy_min_ratio;
 };
 
 struct clodFeatureMetrics
