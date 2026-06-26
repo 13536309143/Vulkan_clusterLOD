@@ -409,6 +409,14 @@ void LodClusters::onUIRender()
         {
           PE::Checkbox("Use TwoPass Culling", (bool*)&m_rendererConfig.useTwoPassCulling,
                        "Use two pass culling in rasterization, otherwise uses only last frame's hiz");
+          ImGui::BeginDisabled(!m_rendererConfig.useTwoPassCulling);
+          PE::Checkbox("Adaptive TwoPass", &m_rendererConfig.useAdaptiveTwoPassCulling,
+                       "Only run the second pass when the scene is large enough and culling matrices changed");
+          PE::InputIntClamped("TwoPass min clusters", (int*)&m_rendererConfig.twoPassMinClusters, 0, 1 << 28, 256, 1024,
+                              ImGuiInputTextFlags_EnterReturnsTrue);
+          PE::InputFloat("TwoPass matrix delta", &m_rendererConfig.twoPassMatrixDelta, 0.0001f, 0.001f, "%.6f",
+                         ImGuiInputTextFlags_EnterReturnsTrue);
+          ImGui::EndDisabled();
 
           ImGui::EndDisabled();
         }
@@ -447,10 +455,39 @@ void LodClusters::onUIRender()
 
         ImGui::TableNextColumn();
 
+        ImGui::Text("TwoPass Active");
+
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", readback.twoPassCullingActive ? "yes" : "no");
+
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
+
+        ImGui::Text("Pass Tasks");
+
+        ImGui::TableNextColumn();
+        ImGui::Text("%s / %s", formatMetric(readback.numTraversedTasksPass0).c_str(),
+                    formatMetric(readback.numTraversedTasksPass1).c_str());
+
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
+
         ImGui::Text("Enqueued Clusters");
 
         ImGui::TableNextColumn();
         ImGui::Text("%s", formatMetric(readback.numRenderedClusters).c_str());
+
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
+
+        ImGui::Text("Pass Clusters");
+
+        ImGui::TableNextColumn();
+        ImGui::Text("%s / %s", formatMetric(readback.numRenderedClustersPass0).c_str(),
+                    formatMetric(readback.numRenderedClustersPass1).c_str());
 
         ImGui::TableNextRow();
 
@@ -1393,6 +1430,9 @@ void LodClusters::onUIRender()
             rowBool("Freeze LOD", m_frameConfig.freezeLoD);
             rowBool("Culling", m_rendererConfig.useCulling);
             rowBool("Two-pass culling", m_rendererConfig.useTwoPassCulling);
+            rowBool("Adaptive two-pass", m_rendererConfig.useAdaptiveTwoPassCulling);
+            rowFmt("Two-pass min clusters", "{}", m_rendererConfig.twoPassMinClusters);
+            rowFmt("Two-pass matrix delta", "{:.6f}", m_rendererConfig.twoPassMatrixDelta);
             rowBool("Separate groups", m_rendererConfig.useSeparateGroups);
             rowBool("Instance sorting", m_rendererConfig.useSorting);
             rowBool("Render stats", m_rendererConfig.useRenderStats);

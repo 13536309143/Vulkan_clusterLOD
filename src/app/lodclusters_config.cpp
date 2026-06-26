@@ -77,6 +77,9 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"culling"}, &m_rendererConfig.useCulling);
 
   m_info.parameterRegistry->add({"twopassculling"}, &m_rendererConfig.useTwoPassCulling);
+  m_info.parameterRegistry->add({"adaptivetwopassculling"}, &m_rendererConfig.useAdaptiveTwoPassCulling);
+  m_info.parameterRegistry->add({"twopassminclusters"}, &m_rendererConfig.twoPassMinClusters);
+  m_info.parameterRegistry->add({"twopassmatrixdelta"}, &m_rendererConfig.twoPassMatrixDelta);
   m_info.parameterRegistry->add({"forcedinvisculling"}, &m_rendererConfig.useForcedInvisibleCulling);
   m_info.parameterRegistry->add({"separategroups"}, &m_rendererConfig.useSeparateGroups);
   m_info.parameterRegistry->add({"sharingpushculled"}, &m_frameConfig.sharingPushCulled);

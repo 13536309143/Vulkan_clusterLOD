@@ -11,8 +11,25 @@
 #include <volk.h>
 #include <nvutils/alignment.hpp>
 #include <fmt/format.h>
+#include <algorithm>
+#include <cmath>
 #include "renderer.hpp"
 #include "shaderio.h"
+
+namespace {
+float matrixMaxAbsDelta(const glm::mat4& a, const glm::mat4& b)
+{
+  float maxDelta = 0.0f;
+  for(int col = 0; col < 4; col++)
+  {
+    for(int row = 0; row < 4; row++)
+    {
+      maxDelta = std::max(maxDelta, std::abs(a[col][row] - b[col][row]));
+    }
+  }
+  return maxDelta;
+}
+}  // namespace
 
 
 // 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
@@ -479,7 +496,17 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
   m_sceneBuildShaderio.traversalViewMatrix    = frame.traversalViewMatrix;
   m_sceneBuildShaderio.cullViewProjMatrix     = frame.cullViewProjMatrix;
   m_sceneBuildShaderio.cullViewProjMatrixLast = frame.cullViewProjMatrixLast;
-  m_sceneBuildShaderio.frameIndex = m_frameIndex;
+  m_sceneBuildShaderio.pass                    = 0;
+  m_sceneBuildShaderio.frameIndex              = m_frameIndex;
+
+  const bool twoPassRequested = m_config.useCulling && m_config.useTwoPassCulling;
+  const bool sceneLargeEnough = !rscene.scene || rscene.scene->m_totalClustersCount >= m_config.twoPassMinClusters;
+  const bool cameraMovedEnough =
+      matrixMaxAbsDelta(frame.cullViewProjMatrix, frame.cullViewProjMatrixLast) >= m_config.twoPassMatrixDelta;
+  const bool twoPassActive = twoPassRequested
+                             && (!m_config.useAdaptiveTwoPassCulling
+                                 || (!frame.freezeCulling && sceneLargeEnough && cameraMovedEnough));
+  m_sceneBuildShaderio.twoPassCullingActive = twoPassActive ? 1u : 0u;
 
   vkCmdUpdateBuffer(cmd, res.m_commonBuffers.frameConstants.buffer, 0, sizeof(shaderio::FrameConstants), (const uint32_t*)&frame.frameConstants);
   vkCmdUpdateBuffer(cmd, m_sceneBuildBuffer.buffer, 0, sizeof(shaderio::SceneBuilding), (const uint32_t*)&m_sceneBuildShaderio);
@@ -515,7 +542,7 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
                          VK_DEPENDENCY_BY_REGION_BIT, 1, &memBarrier, 0, nullptr, 0, nullptr);
   }
 
-  const uint32_t passCount = m_config.useCulling && m_config.useTwoPassCulling ? 2 : 1;
+  const uint32_t passCount = twoPassActive ? 2 : 1;
   const uint32_t lastPass  = passCount - 1;
   for(uint32_t pass = 0; pass < passCount; pass++)
   {
@@ -681,7 +708,7 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
 
     if(!frame.freezeCulling)
     {
-      if(m_config.useTwoPassCulling)
+      if(twoPassActive)
       {
 
         res.cmdBuildHiz(cmd, frame, profiler, pass ^ 1);

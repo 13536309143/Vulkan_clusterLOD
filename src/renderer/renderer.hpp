@@ -89,6 +89,7 @@ struct RendererConfig
   bool useRenderStats            = false;
   bool useCulling                = true;
   bool useTwoPassCulling         = false;
+  bool useAdaptiveTwoPassCulling = true;
   bool useShading                = true;
   bool useDebugVisualization     = true;
   bool useSeparateGroups         = true;
@@ -98,6 +99,8 @@ struct RendererConfig
   uint32_t numRenderClusterBits = 22;
 
   uint32_t numTraversalTaskBits = 22;
+  uint32_t twoPassMinClusters   = 4096;
+  float    twoPassMatrixDelta   = 0.0005f;
 };
 
 

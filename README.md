@@ -230,6 +230,9 @@ cache 和预处理：
 - `--visualize`：选择可视化模式。
 - `--culling`：启用视锥和遮挡剔除。
 - `--twopassculling`：启用 two-pass culling。
+- `--adaptivetwopassculling`：仅在场景规模和相机变化达到阈值时运行第二阶段剔除。
+- `--twopassminclusters`：adaptive two-pass 的最小场景 cluster 数阈值。
+- `--twopassmatrixdelta`：adaptive two-pass 的 culling 矩阵变化阈值。
 - `--forcedinvisculling`：强制 invisible culling。
 - `--separategroups`：使用 separate groups kernel。
 - `--instancesorting`：启用 instance sorting。

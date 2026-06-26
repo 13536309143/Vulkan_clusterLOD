@@ -182,11 +182,25 @@ void main()
 
     readback.numRenderedClusters += numRenderedClusters;
     readback.numTraversedTasks   += buildRW.traversalInfoWriteCounter;
+    if(build.pass == 0)
+    {
+      readback.numRenderedClustersPass0 += numRenderedClusters;
+      readback.numTraversedTasksPass0 += buildRW.traversalInfoWriteCounter;
+    }
+    else
+    {
+      readback.numRenderedClustersPass1 += numRenderedClusters;
+      readback.numTraversedTasksPass1 += buildRW.traversalInfoWriteCounter;
+    }
   #endif
+    readback.twoPassCullingActive = build.twoPassCullingActive;
 
   #if USE_TWO_PASS_CULLING
 
-    setupSecondPass();
+    if(build.twoPassCullingActive != 0)
+    {
+      setupSecondPass();
+    }
   #endif
   }
 #endif

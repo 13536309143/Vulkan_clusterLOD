@@ -200,6 +200,7 @@ struct SceneBuilding
 
   uint pass;
   uint frameIndex;
+  uint twoPassCullingActive;
 
   uint numGeometries;
   uint numRenderInstances;

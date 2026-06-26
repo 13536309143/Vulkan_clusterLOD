@@ -157,7 +157,10 @@ void LodClusters::handleChanges()
 
        || rendererCfgChanged(m_rendererConfig.useEXTmeshShader)
 
-       || rendererCfgChanged(m_rendererConfig.useTwoPassCulling) || rendererCfgChanged(m_rendererConfig.useDepthOnly)
+       || rendererCfgChanged(m_rendererConfig.useTwoPassCulling)
+       || rendererCfgChanged(m_rendererConfig.useAdaptiveTwoPassCulling)
+       || rendererCfgChanged(m_rendererConfig.twoPassMinClusters)
+       || rendererCfgChanged(m_rendererConfig.twoPassMatrixDelta) || rendererCfgChanged(m_rendererConfig.useDepthOnly)
        || rendererCfgChanged(m_rendererConfig.useForcedInvisibleCulling))
     {
 

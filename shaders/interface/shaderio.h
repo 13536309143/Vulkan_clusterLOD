@@ -509,6 +509,11 @@ struct Readback
   uint     numBlasBuilds;
   uint     numRenderedClusters;
   uint64_t numRenderedTriangles;
+  uint     numRenderedClustersPass0;
+  uint     numRenderedClustersPass1;
+  uint     numTraversedTasksPass0;
+  uint     numTraversedTasksPass1;
+  uint     twoPassCullingActive;
 
 
 #ifdef __cplusplus
