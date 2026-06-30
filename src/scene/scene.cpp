@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/scene/scene.cpp
-// 模块定位：Scene 主流程实现，组织缓存检查、glTF 读取、几何处理、LOD 构建、压缩、实例网格复制和统计生成。
-// 数据流：输入是场景文件、加载配置和构建配置；输出是完整 Scene、histogram、bbox、active geometry 和可保存缓存。
-// 方法说明：该流程把“语义导入”和“渲染友好重排”分离，先建立几何语义，再生成适合 GPU 随机访问和批量遍历的运行时布局。
-// 正确性约束：多线程处理时进度和日志需线程安全；缓存命中不得重复构建；所有统计必须在 active geometry/grid 更新后重新归约。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/scene/scene.cpp
+// Implements scene post-processing after glTF import or cache load.
+// This file computes bounding boxes, deduplicates vertices, builds per-geometry LOD hierarchy data, and aggregates statistics.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <cinttypes>
 #include <cstring>
 #include <algorithm>
@@ -23,8 +18,6 @@
 #include "scene.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 namespace {
@@ -68,9 +61,6 @@ void mergeBBox(shaderio::BBox& dst, const shaderio::BBox& src)
 }
 
 
-// 函数：Scene::ProcessingInfo::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void Scene::ProcessingInfo::init(float processingThreadsPct)
 {
 
@@ -87,9 +77,6 @@ void Scene::ProcessingInfo::init(float processingThreadsPct)
 }
 
 
-// 函数：Scene::ProcessingInfo::setupParallelism。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void Scene::ProcessingInfo::setupParallelism(size_t geometryCount_, size_t geometryCompletedCount, int parallelismMode)
 {
   geometryCount = geometryCount_;
@@ -109,9 +96,6 @@ void Scene::ProcessingInfo::setupParallelism(size_t geometryCount_, size_t geome
 }
 
 
-// 函数：Scene::ProcessingInfo::setupCompressedGltf。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void Scene::ProcessingInfo::setupCompressedGltf(size_t bufferViewCount)
 {
   bufferViewUsers.resize(bufferViewCount, {0});
@@ -119,9 +103,6 @@ void Scene::ProcessingInfo::setupCompressedGltf(size_t bufferViewCount)
 }
 
 
-// 函数：Scene::ProcessingInfo::logBegin。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Scene::ProcessingInfo::logBegin(uint64_t totalTriangleCount)
 {
   LOGI("... geometry load & processing: geometries %" PRIu64 ", threads outer %d inner %d\n", geometryCount,
@@ -138,16 +119,10 @@ void Scene::ProcessingInfo::logBegin(uint64_t totalTriangleCount)
 }
 
 
-// 函数：Scene::ProcessingInfo::logCompletedGeometry。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 uint32_t Scene::ProcessingInfo::logCompletedGeometry(uint64_t geometryTriangleCount)
 {
 
 
-  // 函数：lock。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   std::lock_guard lock(progressMutex);
 
   progressGeometriesCompleted++;
@@ -178,9 +153,6 @@ uint32_t Scene::ProcessingInfo::logCompletedGeometry(uint64_t geometryTriangleCo
 }
 
 
-// 函数：Scene::ProcessingInfo::logEnd。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Scene::ProcessingInfo::logEnd()
 {
 
@@ -240,9 +212,6 @@ void Scene::ProcessingInfo::logEnd()
 }
 
 
-// 函数：Scene::ProcessingInfo::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void Scene::ProcessingInfo::deinit()
 {
   if(numPoolThreads != numPoolThreadsOriginal)
@@ -279,9 +248,6 @@ void Scene::fillGroupRuntimeData(const GroupInfo& srcGroupInfo,
   {
 
 
-    // 函数：groupStorage。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     GroupStorage groupStorage(dst, dstGroupInfo);
     groupStorage.group->residentID        = groupResidentID;
     groupStorage.group->clusterResidentID = clusterResidentID;
@@ -491,18 +457,12 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
 }
 
 
-// 函数：Scene::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void Scene::deinit()
 {
   *this = {};
 }
 
 
-// 函数：Scene::updateSceneGrid。根据最新状态刷新缓存数据、GPU 地址、描述符或统计信息。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：更新函数负责把“旧状态”推进到“当前状态”，因此要避免部分更新造成 CPU/GPU 视图不一致。
 void Scene::updateSceneGrid(const SceneGridConfig& gridConfig)
 {
   m_gridConfig = gridConfig;
@@ -518,15 +478,9 @@ void Scene::updateSceneGrid(const SceneGridConfig& gridConfig)
   m_activeGeometryCount = m_gridConfig.uniqueGeometriesForCopies ? m_originalGeometryCount * copiesCount : m_originalGeometryCount;
 
 
-  // 函数：rng。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   std::default_random_engine            rng(2342);
 
 
-  // 函数：randomUnorm。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   std::uniform_real_distribution<float> randomUnorm(0.0f, 1.0f);
 
   uint32_t axis    = m_gridConfig.gridBits;
@@ -727,9 +681,6 @@ void Scene::updateSceneGrid(const SceneGridConfig& gridConfig)
 }
 
 
-// 函数：Scene::computeInstanceBBoxes。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
 void Scene::computeInstanceBBoxes()
 {
   m_bbox = {{FLT_MAX, FLT_MAX, FLT_MAX}, {-FLT_MAX, -FLT_MAX, -FLT_MAX}, 0, 0};
@@ -748,9 +699,6 @@ void Scene::computeInstanceBBoxes()
       bool z = (v & 4) != 0;
 
 
-      // 函数：weight。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-      // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-      // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
       glm::bvec3 weight(x, y, z);
 
       glm::vec3  corner = glm::mix(geometry.bbox.lo, geometry.bbox.hi, weight);
@@ -784,9 +732,6 @@ void Scene::computeInstanceBBoxes()
 }
 
 
-// 函数：Scene::processGeometry。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Scene::processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex, bool isCached)
 {
   GeometryStorage& geometryStorage = m_geometryStorages[geometryIndex];
@@ -867,9 +812,6 @@ void Scene::processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex
 }
 
 
-// 函数：Scene::computeLodBboxes_recursive。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
 void Scene::computeLodBboxes_recursive(GeometryStorage& geometry, size_t i)
 {
   const shaderio::Node& node = geometry.lodNodes[i];
@@ -882,9 +824,6 @@ void Scene::computeLodBboxes_recursive(GeometryStorage& geometry, size_t i)
     GroupInfo groupInfo = geometry.groupInfos[node.groupRange.groupIndex];
 
 
-    // 函数：groupView。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     GroupView groupView(geometry.groupData, groupInfo);
 
     for(uint32_t c = 0; c < groupInfo.clusterCount; c++)
@@ -916,9 +855,6 @@ void Scene::computeLodBboxes_recursive(GeometryStorage& geometry, size_t i)
 }
 
 
-// 结构：HashVertexRange。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct HashVertexRange
 {
   uint32_t offset = 0;
@@ -928,16 +864,10 @@ struct HashVertexRange
 static_assert(std::atomic_uint32_t::is_always_lock_free && sizeof(std::atomic_uint32_t) == sizeof(uint32_t));
 
 
-// 函数：Scene::buildGeometryDedupVertices。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 void Scene::buildGeometryDedupVertices(ProcessingInfo& processingInfo, GeometryStorage& geometry)
 {
 
 
-  // 函数：remap。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   std::vector<uint32_t> remap(geometry.vertexPositions.size());
 
   size_t uniqueVertices = 0;
@@ -993,9 +923,6 @@ void Scene::buildGeometryDedupVertices(ProcessingInfo& processingInfo, GeometryS
   {
 
 
-    // 函数：newPositions。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     std::vector<glm::vec3> newPositions(uniqueVertices);
     meshopt_remapVertexBuffer(newPositions.data(), geometry.vertexPositions.data(), geometry.vertexPositions.size(),
                               sizeof(glm::vec3), remap.data());
@@ -1007,9 +934,6 @@ void Scene::buildGeometryDedupVertices(ProcessingInfo& processingInfo, GeometryS
   {
 
 
-    // 函数：newAttributes。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     std::vector<float> newAttributes(uniqueVertices * attributeStride);
     meshopt_remapVertexBuffer(newAttributes.data(), geometry.vertexAttributes.data(), geometry.vertexPositions.size(),
                               sizeof(float) * attributeStride, remap.data());
@@ -1022,9 +946,6 @@ void Scene::buildGeometryDedupVertices(ProcessingInfo& processingInfo, GeometryS
 }
 
 
-// 函数：Scene::computeHistogramMaxs。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
 void Scene::computeHistogramMaxs()
 {
   m_histograms.clusterTrianglesMax = 0u;

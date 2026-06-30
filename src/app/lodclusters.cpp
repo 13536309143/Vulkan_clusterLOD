@@ -1,18 +1,11 @@
 //==============================================================================
-// 文件：src/app/lodclusters.cpp
-// 模块定位：LodClusters 实现索引单元，说明顶层应用逻辑已按职责拆分到多个编译单元。
-// 数据流：本文件不承载运行时分支，只保留命名空间和聚合说明，降低主头文件读者的导航成本。
-// 方法说明：这种薄翻译单元用于保留项目结构的语义入口，同时避免把生命周期、配置、场景和 UI 逻辑混在一个大文件中。
-// 正确性约束：不要在这里加入跨模块状态；新增业务逻辑应继续按职责放入对应的 lodclusters_*.cpp。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/app/lodclusters.cpp
+// Defines app-level constants and constructor defaults for the LOD clusters sample.
+// Configuration values here seed both command-line parameters and UI-visible runtime state.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include "lodclusters.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 

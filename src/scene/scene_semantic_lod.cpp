@@ -1,3 +1,8 @@
+//==============================================================================
+// src/scene/scene_semantic_lod.cpp
+// Loads optional semantic LOD policy tables and merges them into mesh preprocessing settings.
+// Policies tune simplification priorities per mesh or node while contributing to cache identity through stable hashes.
+//==============================================================================
 #include "scene.hpp"
 
 #include <algorithm>
@@ -410,4 +415,4 @@ void Scene::applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPol
   }
 }
 
-}  // namespace lodclusters
+}

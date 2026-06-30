@@ -1,23 +1,24 @@
-﻿//==============================================================================
-// 鏂囦欢锛歴rc/streaming/streaming.cpp
-// 妯″潡瀹氫綅锛歋ceneStreaming 涓绘祦绋嬪疄鐜帮紝澶勭悊璇锋眰瀹屾垚銆佹暟鎹笂浼犮€佸湴鍧€鏇存柊銆乤ge filter銆佸悓姝ュ拰璁＄畻 绠＄嚎銆?// 鏁版嵁娴侊細杈撳叆鏄?GPU 涓婁竴甯т骇鐢熺殑璇锋眰鍜?CPU 宸插畬鎴愪换鍔★紱杈撳嚭鏄柊椹荤暀鏁版嵁銆佸嵏杞戒慨琛ャ€佹洿鏂板悗鐨?Geometry 鍦板潃琛ㄣ€?// 鏂规硶璇存槑锛氳娴佺▼褰㈡垚闂幆锛氶亶鍘嗕骇鐢熼渶姹傦紝CPU 婊¤冻闇€姹傦紝GPU 鍦板潃琛ㄨ淇ˉ锛屼笅涓€甯ч亶鍘嗗熀浜庢柊椹荤暀闆嗗悎缁х画鍐崇瓥銆?// 姝ｇ‘鎬х害鏉燂細寮傛 transfer 涓?graphics 闃熷垪蹇呴』閫氳繃 鏃堕棿绾?semaphore 鍏宠仈锛涘け璐ユ垨閲嶅璇锋眰蹇呴』瀹夊叏閲婃斁浠诲姟绱㈠紩銆?// 娉ㄩ噴椋庢牸锛氫娇鐢ㄤ腑鏂囪В閲?CPU 渚ц涔夛紱淇濈暀蹇呰鐨?API銆佺被鍨嬪悕鍜屾暟瀛︾缉鍐欎互渚挎绱€?//==============================================================================
-// 渚濊禆璇存槑锛氬紩鍏ユ湰缂栬瘧鍗曞厓闇€瑕佺殑澶栭儴搴撱€侀」鐩ā鍧楀拰鍏变韩鐫€鑹插櫒甯冨眬銆?// 渚濊禆椤哄簭閫氬父鍙嶆槧鎶借薄灞傛锛氬厛澶栭儴搴擄紝鍐嶉」鐩ā鍧楋紝鏈€鍚庝笌 GPU 鍏变韩鐨勬帴鍙ｅ畾涔夈€?#include <volk.h>
+//==============================================================================
+// src/streaming/streaming.cpp
+// Implements GPU-driven scene streaming.
+// Traversal writes requests, CPU code schedules bounded transfers, and compute passes patch shader-visible geometry addresses each frame.
+//==============================================================================
+
+
+
 #include <volk.h>
 #include <fmt/format.h>
 #include "streaming.hpp"
 
 
-// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define STREAMING_DEBUG_FORCE_REQUESTS 0
 #define STREAMING_DEBUG_FORCE_REQUESTS 0
 
 
-// 鍛藉悕绌洪棿璇存槑锛氶檺鍒剁鍙峰彲瑙佽寖鍥达紝骞惰〃鏄庤繖浜涚被鍨嬪拰鍑芥暟灞炰簬鍚屼竴鍔熻兘鍩熴€?// 璇ヨ竟鐣屾湁鍔╀簬鍖哄垎搴旂敤灞傘€佹覆鏌撳眰銆佸満鏅眰鍜岀畻娉曞眰鐨勮亴璐ｃ€?namespace lodclusters {
 namespace lodclusters {
 
 template <class T>
 
 
-// 缁撴瀯锛歄ffsetOrPointer銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct OffsetOrPointer
 struct OffsetOrPointer
 {
   union
@@ -28,7 +29,6 @@ struct OffsetOrPointer
 };
 
 
-// 鍑芥暟锛歋ceneStreaming::init銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?bool SceneStreaming::init(Resources* resources, const Scene* scene, const StreamingConfig& config)
 bool SceneStreaming::init(Resources* resources, const Scene* scene, const StreamingConfig& config)
 {
 
@@ -134,7 +134,6 @@ bool SceneStreaming::init(Resources* resources, const Scene* scene, const Stream
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::updateBindings銆傛牴鎹渶鏂扮姸鎬佸埛鏂扮紦瀛樻暟鎹€丟PU 鍦板潃銆佹弿杩扮鎴栫粺璁′俊鎭€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氭洿鏂板嚱鏁拌礋璐ｆ妸鈥滄棫鐘舵€佲€濇帹杩涘埌鈥滃綋鍓嶇姸鎬佲€濓紝鍥犳瑕侀伩鍏嶉儴鍒嗘洿鏂伴€犳垚 CPU/GPU 瑙嗗浘涓嶄竴鑷淬€?void SceneStreaming::updateBindings(const nvvk::Buffer& sceneBuildingBuffer)
 void SceneStreaming::updateBindings(const nvvk::Buffer& sceneBuildingBuffer)
 {
   nvvk::WriteSetContainer writeSets;
@@ -149,7 +148,6 @@ void SceneStreaming::updateBindings(const nvvk::Buffer& sceneBuildingBuffer)
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::resetGeometryGroupAddresses銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?void SceneStreaming::resetGeometryGroupAddresses(Resources::BatchedUploader& uploader)
 void SceneStreaming::resetGeometryGroupAddresses(Resources::BatchedUploader& uploader)
 {
 
@@ -183,12 +181,10 @@ void SceneStreaming::resetGeometryGroupAddresses(Resources::BatchedUploader& upl
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::initGeometries銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?void SceneStreaming::initGeometries(Resources& res, const Scene* scene)
 void SceneStreaming::initGeometries(Resources& res, const Scene* scene)
 {
 
 
-  // 鍑芥暟锛歶ploader銆備粠鏂囦欢銆佺紦瀛樸€丟PU 缂撳啿鎴栧叡浜竷灞€涓鍙栨暟鎹苟杞崲涓烘湰妯″潡鏍煎紡銆?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氳鍙栬矾寰勯渶瑕佹牎楠岃緭鍏ュ悎娉曟€э紝骞舵妸澶栭儴鏍煎紡鐨勪笉纭畾鎬ц浆鍖栦负鍐呴儴纭畾甯冨眬銆?  Resources::BatchedUploader uploader(res);
   Resources::BatchedUploader uploader(res);
 
   m_shaderGeometries.resize(scene->getActiveGeometryCount());
@@ -260,7 +256,6 @@ void SceneStreaming::initGeometries(Resources& res, const Scene* scene)
     const Scene::GroupInfo groupInfo    = sceneGeometry.groupInfos[lastLodLevel.groupOffset];
 
 
-    // 鍑芥暟锛歡roupView銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?    // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?    // 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?    Scene::GroupView       groupView(sceneGeometry.groupData, groupInfo);
     Scene::GroupView       groupView(sceneGeometry.groupData, groupInfo);
 
     assert(groupInfo.clusterCount == 1);
@@ -650,7 +645,6 @@ uint32_t SceneStreaming::handleCompletedRequest(VkCommandBuffer      cmd,
     {
 
 
-      // 鍑芥暟锛歡roupView銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?      // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?      // 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?      Scene::GroupView groupView(sceneGeometry.groupData, groupInfo);
       Scene::GroupView groupView(sceneGeometry.groupData, groupInfo);
       if(groupInfo.uncompressedSizeBytes)
       {
@@ -779,7 +773,6 @@ uint32_t SceneStreaming::handleCompletedRequest(VkCommandBuffer      cmd,
 }
 
 
-// 鍑芥暟锛歡etWorkGroupCount銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?static uint32_t getWorkGroupCount(uint32_t numThreads, uint32_t workGroupSize)
 static uint32_t getWorkGroupCount(uint32_t numThreads, uint32_t workGroupSize)
 {
 
@@ -787,7 +780,6 @@ static uint32_t getWorkGroupCount(uint32_t numThreads, uint32_t workGroupSize)
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::cmdPreTraversal銆傚悜鍛戒护缂撳啿褰曞埗 GPU 鎿嶄綔锛屽苟渚濊禆澶栧眰璋冪敤鑰呭畨鎺掓彁浜や笌鍚屾銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳绫诲嚱鏁板彧鎻忚堪鍛戒护搴忓垪锛屼笉搴斿亣璁惧懡浠ゅ凡缁忕珛鍗虫墽琛屻€?void SceneStreaming::cmdPreTraversal(VkCommandBuffer cmd, nvvk::ProfilerGpuTimer& profiler)
 void SceneStreaming::cmdPreTraversal(VkCommandBuffer cmd, nvvk::ProfilerGpuTimer& profiler)
 {
   Resources& res = *m_resources;
@@ -814,7 +806,6 @@ void SceneStreaming::cmdPreTraversal(VkCommandBuffer cmd, nvvk::ProfilerGpuTimer
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::cmdPostTraversal銆傚悜鍛戒护缂撳啿褰曞埗 GPU 鎿嶄綔锛屽苟渚濊禆澶栧眰璋冪敤鑰呭畨鎺掓彁浜や笌鍚屾銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳绫诲嚱鏁板彧鎻忚堪鍛戒护搴忓垪锛屼笉搴斿亣璁惧懡浠ゅ凡缁忕珛鍗虫墽琛屻€?void SceneStreaming::cmdPostTraversal(VkCommandBuffer cmd, bool runAgeFilter, nvvk::ProfilerGpuTimer& profiler)
 void SceneStreaming::cmdPostTraversal(VkCommandBuffer cmd, bool runAgeFilter, nvvk::ProfilerGpuTimer& profiler)
 {
   Resources& res = *m_resources;
@@ -836,7 +827,6 @@ void SceneStreaming::cmdPostTraversal(VkCommandBuffer cmd, bool runAgeFilter, nv
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::cmdEndFrame銆傚悜鍛戒护缂撳啿褰曞埗 GPU 鎿嶄綔锛屽苟渚濊禆澶栧眰璋冪敤鑰呭畨鎺掓彁浜や笌鍚屾銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳绫诲嚱鏁板彧鎻忚堪鍛戒护搴忓垪锛屼笉搴斿亣璁惧懡浠ゅ凡缁忕珛鍗虫墽琛屻€?void SceneStreaming::cmdEndFrame(VkCommandBuffer cmd, QueueState& cmdQueueState, nvvk::ProfilerGpuTimer& profiler)
 void SceneStreaming::cmdEndFrame(VkCommandBuffer cmd, QueueState& cmdQueueState, nvvk::ProfilerGpuTimer& profiler)
 {
 
@@ -864,7 +854,6 @@ void SceneStreaming::cmdEndFrame(VkCommandBuffer cmd, QueueState& cmdQueueState,
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::getStats銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?void SceneStreaming::getStats(StreamingStats& stats) const
 void SceneStreaming::getStats(StreamingStats& stats) const
 {
   stats = m_stats;
@@ -877,7 +866,6 @@ void SceneStreaming::getStats(StreamingStats& stats) const
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::getGeometrySize銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?size_t SceneStreaming::getGeometrySize(bool reserved) const
 size_t SceneStreaming::getGeometrySize(bool reserved) const
 {
   StreamingStats stats;
@@ -895,7 +883,6 @@ size_t SceneStreaming::getGeometrySize(bool reserved) const
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::deinit銆傞噴鏀炬垨鍥炴敹鍓嶉潰鍒濆鍖栫殑璧勬簮锛屼繚鎸佺敓鍛藉懆鏈熸垚瀵圭鐞嗐€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氶噴鏀鹃『搴忚閬靛畧璧勬簮渚濊禆鍏崇郴锛岄伩鍏?GPU 浠嶅彲鑳借闂殑瀵硅薄琚彁鍓嶉攢姣併€?void SceneStreaming::deinit()
 void SceneStreaming::deinit()
 {
   if(!m_resources)
@@ -945,7 +932,6 @@ void SceneStreaming::deinit()
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::reset銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?void SceneStreaming::reset()
 void SceneStreaming::reset()
 {
   Resources& res = *m_resources;
@@ -973,7 +959,6 @@ void SceneStreaming::reset()
   m_frameIndex = 1;
 
 
-  // 鍑芥暟锛歶ploader銆備粠鏂囦欢銆佺紦瀛樸€丟PU 缂撳啿鎴栧叡浜竷灞€涓鍙栨暟鎹苟杞崲涓烘湰妯″潡鏍煎紡銆?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氳鍙栬矾寰勯渶瑕佹牎楠岃緭鍏ュ悎娉曟€э紝骞舵妸澶栭儴鏍煎紡鐨勪笉纭畾鎬ц浆鍖栦负鍐呴儴纭畾甯冨眬銆?  Resources::BatchedUploader uploader(res);
   Resources::BatchedUploader uploader(res);
 
   resetGeometryGroupAddresses(uploader);
@@ -982,7 +967,6 @@ void SceneStreaming::reset()
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::initShadersAndPipelines銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?bool SceneStreaming::initShadersAndPipelines()
 bool SceneStreaming::initShadersAndPipelines()
 {
   Resources& res = *m_resources;
@@ -1030,7 +1014,6 @@ bool SceneStreaming::initShadersAndPipelines()
 }
 
 
-// 鍑芥暟锛歋ceneStreaming::deinitShadersAndPipelines銆傞噴鏀炬垨鍥炴敹鍓嶉潰鍒濆鍖栫殑璧勬簮锛屼繚鎸佺敓鍛藉懆鏈熸垚瀵圭鐞嗐€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氶噴鏀鹃『搴忚閬靛畧璧勬簮渚濊禆鍏崇郴锛岄伩鍏?GPU 浠嶅彲鑳借闂殑瀵硅薄琚彁鍓嶉攢姣併€?void SceneStreaming::deinitShadersAndPipelines()
 void SceneStreaming::deinitShadersAndPipelines()
 {
   Resources& res = *m_resources;

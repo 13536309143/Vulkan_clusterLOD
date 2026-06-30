@@ -1,17 +1,11 @@
 //==============================================================================
-// 文件：shaders/common/render_shading.glsl
-// 模块定位：着色器公共函数片段，集中提供属性编码、剔除、屏幕空间估计和着色辅助逻辑。
-// 数据流：多个计算、网格和片元阶段通过 include 复用这些函数，避免同一数学逻辑在不同阶段分叉。
-// 方法说明：公共函数将几何、可见性和材质计算标准化，使 traversal 与 render 对同一对象得到一致判断。
-// 正确性约束：公共函数不能依赖某个单独 阶段 的私有状态；所有宏开关都应有明确默认值。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// shaders/common/render_shading.glsl
+// Shared fragment shading, visualization, wireframe, picking, ambient-occlusion, and debug color utilities.
+// Render and debug shaders use this file to keep material interpretation and readback encoding consistent.
 //==============================================================================
 #extension GL_EXT_fragment_shader_barycentric : enable
 
 
-// 函数：batlow。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 batlow(float t)
 {
 
@@ -34,9 +28,6 @@ vec3 batlow(float t)
 }
 
 
-// 函数：hue2rgb。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 hue2rgb(float hue)
 {
 
@@ -50,9 +41,6 @@ vec3 hue2rgb(float hue)
 }
 
 
-// 函数：lodMix。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 lodMix(float v)
 {
   float low = 0.15;
@@ -69,9 +57,6 @@ vec3 lodMix(float v)
 }
 
 
-// 函数：colorizeID。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 colorizeID(uint clusterID)
 {
   return vec3(unpackUnorm4x8(murmurHash(clusterID ^ view.colorXor)).xyz * 0.5 + 0.3);
@@ -108,9 +93,6 @@ vec3 semanticLodColor(uint instanceID)
 }
 
 
-// 函数：visualizeColor。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 visualizeColor(uint visData, uint instanceID)
 {
   if(view.visualize == VISUALIZE_CLUSTER || view.visualize == VISUALIZE_GROUP || view.visualize == VISUALIZE_TRIANGLE)
@@ -136,7 +118,9 @@ vec3 visualizeColor(uint visData, uint instanceID)
   }
 }
 
-vec4 shading(uint instanceID, vec3 wPos, vec3 wNormal, vec4 wTangent, vec2 oTexCoord, uint visData, float overheadLight, float ambientOcclusion
+// Main material/debug shading path shared by clustered rendering and visualization modes.
+vec4 shading(uint instanceID, vec3 wPos, vec3 wNormal, vec4 wTangent, vec2 oTexCoord, uint visData, float overheadLight, // Ray-marched ambient occlusion used for inspection rather than physically based lighting.
+float ambientOcclusion
 )
 {
   const vec3 skyColor           = view.skyParams.skyColor;
@@ -219,9 +203,7 @@ vec4 shading(uint instanceID, vec3 wPos, vec3 wNormal, vec4 wTangent, vec2 oTexC
 }
 
 
-// 函数：packPickingValue。在紧凑编码和逻辑结构之间转换，减少带宽或便于着色器访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：编码位宽、符号位和特殊值必须与写入端/读取端完全一致，否则会产生难以定位的跨阶段错误。
+// Store an object identifier and depth in one 64-bit value so atomic min keeps the nearest pick.
 uint64_t packPickingValue(uint32_t v, float z)
 {
 
@@ -235,9 +217,6 @@ uint64_t packPickingValue(uint32_t v, float z)
 }
 
 
-// 函数：getLineWidth。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float getLineWidth(in vec3 deltas, in float thickness, in float smoothing, in vec3 barys)
 {
   barys         = smoothstep(deltas * (thickness), deltas * (thickness + smoothing), barys);
@@ -246,18 +225,12 @@ float getLineWidth(in vec3 deltas, in float thickness, in float smoothing, in ve
 }
 
 
-// 函数：edgePosition。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float edgePosition(vec3 barycentrics)
 {
   return max(barycentrics.z, max(barycentrics.y, barycentrics.x));
 }
 
 
-// 函数：stipple。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float stipple(in float stippleRepeats, in float stippleLength, in float edgePos)
 {
   float offset = 1.0 / stippleRepeats;
@@ -267,9 +240,6 @@ float stipple(in float stippleRepeats, in float stippleLength, in float edgePos)
 }
 
 
-// 函数：addWireframe。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 addWireframe(vec3 color, vec3 barycentrics, bool frontFacing, vec3 barycentricsDerivatives, vec3 wireColor)
 {
   float oThickness    = view.wireThickness * 0.5;
@@ -307,9 +277,6 @@ vec3 addWireframe(vec3 color, vec3 barycentrics, bool frontFacing, vec3 barycent
 #if SUPPORTS_RT == 1
 
 
-// 函数：wangHash。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 uint wangHash(uint seed)
 {
   seed = (seed ^ 61) ^ (seed >> 16);
@@ -321,9 +288,6 @@ uint wangHash(uint seed)
 }
 
 
-// 函数：xxhash32。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 uint xxhash32(uint3 p)
 {
 
@@ -339,9 +303,6 @@ uint xxhash32(uint3 p)
 }
 
 
-// 函数：pcg。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 uint pcg(inout uint state)
 {
   uint prev = state * 747796405u + 2891336453u;
@@ -351,9 +312,6 @@ uint pcg(inout uint state)
 }
 
 
-// 函数：rand。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float rand(inout uint seed)
 {
 
@@ -362,9 +320,6 @@ float rand(inout uint seed)
 }
 
 
-// 函数：computeDefaultBasis。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
 void computeDefaultBasis(const vec3 z, out vec3 x, out vec3 y)
 {
   const float yz = -z.y * z.z;
@@ -376,15 +331,10 @@ void computeDefaultBasis(const vec3 z, out vec3 x, out vec3 y)
 #ifndef M_PI
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define M_PI 3.141592653589
 #endif
 
 
-// 函数：offsetRay。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 offsetRay(vec3 p, vec3 dir, vec3 geonrm)
 {
   vec3 n = sign(dot(dir, geonrm)) * geonrm;
@@ -403,9 +353,6 @@ vec3 offsetRay(vec3 p, vec3 dir, vec3 geonrm)
 }
 
 
-// 函数：ambientOcclusion。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float ambientOcclusion(vec3 wPos, vec3 wNormal, uint32_t sampleCount, float radius)
 {
   if (sampleCount == 0) return 0.7f;
@@ -434,9 +381,6 @@ float ambientOcclusion(vec3 wPos, vec3 wNormal, uint32_t sampleCount, float radi
     traceRayEXT(asScene, gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
 
 
-                // 函数：offsetRay。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-                // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-                // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
                 mask , 0, 0, 1, offsetRay(wPos, wDirection, wNormal), 1e-4f, wDirection, radius, 1);
     if(rayHitAO > 0.f)
     {
@@ -449,9 +393,6 @@ float ambientOcclusion(vec3 wPos, vec3 wNormal, uint32_t sampleCount, float radi
 }
 
 
-// 函数：traceShadowRay。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float traceShadowRay(vec3 wPos, vec3 wNormal, vec3 wDirection)
 {
   rayHitAO         = 1.f;
@@ -465,18 +406,12 @@ float traceShadowRay(vec3 wPos, vec3 wNormal, vec3 wDirection)
 }
 
 
-// 函数：determinant。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float determinant(vec3 a, vec3 b, vec3 c)
 {
   return dot(cross(a, b), c);
 }
 
 
-// 函数：intersectRayTriangle。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 vec3 intersectRayTriangle(vec3 origin, vec3 direction, vec3 v0, vec3 v1, vec3 v2)
 {
 
@@ -507,9 +442,6 @@ vec3 intersectRayTriangle(vec3 origin, vec3 direction, vec3 v0, vec3 v1, vec3 v2
 }
 
 
-// 函数：objectToPixel。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 ivec2 objectToPixel(vec3 objectPos)
 {
 

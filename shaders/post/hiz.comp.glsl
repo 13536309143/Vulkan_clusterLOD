@@ -1,10 +1,7 @@
 //==============================================================================
-// 文件：shaders/post/hiz.comp.glsl
-// 模块定位：后处理着色器，负责全屏背景、软件光栅结果合并和 Hi-Z 层级深度生成。
-// 数据流：读取 帧缓冲、atomic raster image 或 depth texture，输出最终颜色或下一帧剔除使用的层级深度。
-// 方法说明：后处理阶段把异步生成的中间结果规约为统一图像，并为下一帧可见性判断建立反馈。
-// 正确性约束：atomic resolve 的深度比较语义要与写入端一致；Hi-Z 归约必须保守，不能错误剔除可见对象。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// shaders/post/hiz.comp.glsl
+// Depth reduction compute shader used to build the hierarchical-Z pyramid.
+// The generated levels feed conservative occlusion tests in traversal and optional debug passes.
 //==============================================================================
 #version 460
 
@@ -12,71 +9,51 @@
 #ifndef NV_HIZ_MAX_LEVELS
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_MAX_LEVELS   16
 #endif
 #ifndef NV_HIZ_MSAA_SAMPLES
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_MSAA_SAMPLES 0
 #endif
 #ifndef NV_HIZ_IS_FIRST
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_IS_FIRST 1
 #endif
 #ifndef NV_HIZ_FORMAT
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_FORMAT r32f
 #endif
 #ifndef NV_HIZ_OUTPUT_NEAR
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_OUTPUT_NEAR 1
 #endif
 #ifndef NV_HIZ_LEVELS
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_LEVELS 3
 #endif
 #ifndef NV_HIZ_NEAR_LEVEL
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_NEAR_LEVEL 0
 #endif
 #ifndef NV_HIZ_FAR_LEVEL
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_FAR_LEVEL 0
 #endif
 #ifndef NV_HIZ_REVERSED_Z
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_REVERSED_Z 0
 #endif
 #ifndef NV_HIZ_USE_STEREO
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define NV_HIZ_USE_STEREO 0
 #endif
 
@@ -96,13 +73,9 @@
 #endif
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(local_size_x=32,local_size_y=2) in;
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(push_constant) uniform passUniforms {
   ivec4 srcSize;
   int   writeLod;
@@ -118,8 +91,6 @@ layout(push_constant) uniform passUniforms {
   #define imageType     image2DArray
 
 
-  // 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-  // 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
   #define IACCESS(v,l)  ivec3(v,l)
 #else
   #define samplerTypeMS sampler2DMS
@@ -127,8 +98,6 @@ layout(push_constant) uniform passUniforms {
   #define imageType     image2D
 
 
-  // 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-  // 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
   #define IACCESS(v,l)  v
 #endif
 
@@ -136,36 +105,23 @@ layout(push_constant) uniform passUniforms {
 #if NV_HIZ_IS_FIRST && NV_HIZ_MSAA_SAMPLES
 
 
-  // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-  // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
   layout(binding=0) uniform samplerTypeMS texDepth;
 #else
 
 
-  // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-  // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
   layout(binding=0) uniform samplerType   texDepth;
 #endif
 
 
-  // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-  // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
   layout(binding=1) uniform samplerType   texNear;
 
 
-  // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-  // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
   layout(binding=2,NV_HIZ_FORMAT) uniform imageType imgNear;
 
 
-  // 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-  // 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
   layout(binding=3,NV_HIZ_FORMAT) uniform imageType imgLevels[NV_HIZ_MAX_LEVELS];
 
 
-// 函数：main。作为本着色器阶段入口，按绑定资源执行当前 GPU 工作。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该入口位于控制流根部，调用顺序决定后续资源生命周期和数据依赖。
 void main()
 {
 

@@ -1,16 +1,11 @@
 //==============================================================================
-// 文件：src/meshlod/meshlod_build.h
-// 模块定位：LOD 构建主算法，管理多轮网格简化、簇 化、组 输出和并行迭代任务。
-// 数据流：输入 clodMesh、clodConfig 与输出回调；输出多级 簇/组 以及可由上层构建层次树的中间结果。
-// 方法说明：算法通过逐级降低几何复杂度形成层次细节表达，使运行时可依据屏幕误差选择适当精度。
-// 正确性约束：每轮简化必须保持索引有效；输出顺序需可被 Scene 映射到 LOD level；并行任务不得共享未同步可变状态。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/meshlod/meshlod_build.h
+// Main clustered LOD build loop.
+// Each iteration clusters the current mesh, emits groups, simplifies toward the next level, and schedules optional parallel work.
 //==============================================================================
 #pragma once
 
 
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include "meshlod_impl.h"
 #include "meshlod_bounds.h"
 #include "meshlod_clustering.h"
@@ -55,16 +50,10 @@ size_t estimateSplitClusterCapacity(const clodConfig& config, const std::vector<
 }
 
 
-// 函数：outputGroup。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 int outputGroup(const clodConfig& config, const clodMesh& mesh, const std::vector<Cluster>& clusters, const std::vector<int>& group, const clodBounds& simplified, int depth, void* output_context, clodOutput output_callback, size_t task_index, unsigned int thread_index)
 {
 
 
-	// 函数：group_clusters。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<clodCluster> group_clusters(group.size());
 
 	for (size_t i = 0; i < group.size(); ++i)
@@ -86,9 +75,6 @@ int outputGroup(const clodConfig& config, const clodMesh& mesh, const std::vecto
 }
 
 
-// 函数：clodDefaultConfig。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 clodConfig clodDefaultConfig(size_t max_triangles)
 {
 
@@ -130,9 +116,6 @@ clodConfig clodDefaultConfig(size_t max_triangles)
 }
 
 
-// 函数：clodBuild_iterationTask。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 void clodBuild_iterationTask(void* iteration_context, void* output_context, size_t i, unsigned int thread_index)
 {
 	using namespace clod;
@@ -208,9 +191,6 @@ void clodBuild_iterationTask(void* iteration_context, void* output_context, size
 }
 
 
-// 函数：clodBuild。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 size_t clodBuild(clodConfig config, clodMesh mesh, void* output_context, clodOutput output_callback, clodIteration iteration_callback)
 {
 	using namespace clod;

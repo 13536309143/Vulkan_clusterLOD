@@ -1,25 +1,16 @@
 //==============================================================================
-// 文件：src/app/lodclusters_runtime.cpp
-// 模块定位：每帧运行时调度实现，负责配置变更合并、帧常量更新、渲染调用、后处理和时间线推进。
-// 数据流：输入是 UI/参数改变、相机状态、窗口尺寸和上一帧 回读数据；输出是当前帧 FrameConstants 与 renderer 命令流。
-// 方法说明：该文件实现“帧级状态归约”：把多个来源的可变状态规约成一次稳定的 GPU 提交，保证实验参数可追踪。
-// 正确性约束：冻结剔除或 LOD 时必须复用上一帧矩阵。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/app/lodclusters_runtime.cpp
+// Runs per-frame state reconciliation and command recording.
+// Camera freezing, two-pass culling matrices, readback interpretation, and renderer dispatch are consolidated here before GPU submission.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <volk.h>
 #include <nvgui/camera.hpp>
 #include "lodclusters.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
-// 函数：LodClusters::onPreRender。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
+
 void LodClusters::onPreRender()
 {
 
@@ -27,9 +18,6 @@ void LodClusters::onPreRender()
 }
 
 
-// 函数：LodClusters::handleChanges。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void LodClusters::handleChanges()
 {
   if(m_sceneLoading)
@@ -199,9 +187,6 @@ void LodClusters::handleChanges()
 }
 
 
-// 函数：LodClusters::applyCameraString。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void LodClusters::applyCameraString()
 {
 
@@ -216,9 +201,6 @@ void LodClusters::applyCameraString()
 }
 
 
-// 函数：LodClusters::onRender。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void LodClusters::onRender(VkCommandBuffer cmd)
 {
 

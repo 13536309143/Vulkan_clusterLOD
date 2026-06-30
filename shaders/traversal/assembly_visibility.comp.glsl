@@ -1,3 +1,8 @@
+//==============================================================================
+// shaders/traversal/assembly_visibility.comp.glsl
+// Classifies assembly visibility using conservative screen-space and Hi-Z tests.
+// Results allow traversal to skip or prioritize groups when many instances share the same assembly.
+//==============================================================================
 #version 460
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : enable

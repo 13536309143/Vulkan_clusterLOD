@@ -1,16 +1,11 @@
 //==============================================================================
-// 文件：src/scene/scene.hpp
-// 模块定位：CPU 侧场景核心数据结构声明，定义配置、几何体、簇组、实例、相机、统计和缓存处理接口。
-// 数据流：输入来自 glTF primitive 和构建参数；输出是可被预加载或流式上传模块消费的 GeometryView 与 GroupView。
-// 方法说明：Scene 将语义层 mesh 拆分为渲染层 簇/组/LOD hierarchy，形成 CPU 构建与 GPU 遍历之间的契约。
-// 正确性约束：GeometryView 中所有 span 必须指向稳定存储；GroupInfo 的偏移和大小必须与 着色器io 布局一致；实例 bbox 需覆盖变换后的几何体。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/scene/scene.hpp
+// Declares CPU-side scene storage, cache views, geometry group layouts, instances, cameras, and preprocessing state.
+// Scene converts glTF primitives into clustered LOD group payloads that can be either preloaded or streamed to the GPU.
 //==============================================================================
 #pragma once
 
 
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <vector>
 #include <array>
 #include <string>
@@ -29,14 +24,10 @@
 #include "shaderio_scene.h"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 
-// 结构：SceneConfig。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// Build-time scene settings that affect cache identity and GPU-visible payload layout.
 struct SceneConfig
 {
   static const uint32_t version = 8;
@@ -79,7 +70,7 @@ struct SceneConfig
 
 
   uint32_t assemblyCullingMinInstances = 8;
-  float    assemblyLodPixelThreshold   = 24.0f;//
+  float    assemblyLodPixelThreshold   = 24.0f;
 
   bool  featureConstraints        = true;
   float featureImportanceWeight   = 4.0f;
@@ -92,9 +83,6 @@ struct SceneConfig
 };
 
 
-// 结构：SceneLoaderConfig。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct SceneLoaderConfig
 {
 
@@ -124,9 +112,6 @@ struct SceneLoaderConfig
 };
 
 
-// 结构：SceneGridConfig。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct SceneGridConfig
 {
   static const uint32_t minCopies = 1;
@@ -143,17 +128,12 @@ struct SceneGridConfig
 };
 
 
-// 类型：Scene。封装本模块的长期状态、资源所有权和对外操作接口。
-// 设计意图：通过成员函数集中维护状态转移，避免调用方直接拼接底层资源生命周期。
-// 使用约束：实例初始化、每帧使用和释放应遵守声明顺序对应的依赖关系。
+// Owns imported scene data and all CPU preprocessing products needed by runtime rendering.
 class Scene
 {
 public:
 
 
-  // 枚举：Result。集中定义本模块可选模式或状态值，避免调用点使用裸整数。
-  // 设计意图：把实验开关、渲染模式或阶段编号显式命名，使配置文件、UI 和代码路径可以互相对应。
-  // 使用约束：新增枚举值时需要同步 UI 文本、参数解析和相关 switch 分支。
   enum Result
   {
     SCENE_RESULT_SUCCESS,
@@ -170,21 +150,12 @@ public:
               bool                         skipCache);
 
 
-  // 函数：saveCache。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
   bool   saveCache() const;
 
 
-  // 函数：deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
   void   deinit();
 
 
-  // 函数：updateSceneGrid。根据最新状态刷新缓存数据、GPU 地址、描述符或统计信息。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：更新函数负责把“旧状态”推进到“当前状态”，因此要避免部分更新造成 CPU/GPU 视图不一致。
   void updateSceneGrid(const SceneGridConfig& gridConfig);
 
   bool isMemoryMappedCache() const { return m_loadedFromCache && m_cacheFileMapping.valid(); }
@@ -193,9 +164,6 @@ public:
   const std::filesystem::path& getCacheFilePath() const { return m_cacheFilePath; }
 
 
-  // 结构：Range。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct Range
   {
     uint32_t offset;
@@ -203,10 +171,8 @@ public:
   };
 
 
-  // 结构：GroupInfo。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
-  struct GroupInfo
+  // Compact metadata for a packed group payload stored in the scene cache and upload buffers.
+struct GroupInfo
   {
     uint64_t offsetBytes : 42;
     uint64_t sizeBytes : 22;
@@ -226,9 +192,6 @@ public:
     uint32_t getDeviceSize() const { return uint32_t(uncompressedSizeBytes ? uncompressedSizeBytes : sizeBytes); }
 
 
-    // 函数：estimateVertexDataCount。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     uint32_t estimateVertexDataCount() const
     {
       uint32_t dataCount = vertexCount * 3;
@@ -250,9 +213,6 @@ public:
     }
 
 
-    // 函数：computeSize。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
     size_t computeSize() const
     {
       size_t threadGroupSize = sizeof(shaderio::Group);
@@ -265,9 +225,6 @@ public:
     }
 
 
-    // 函数：computeUncompressedSectionSize。执行压缩或解压流程，在体积和运行时访问格式之间做转换。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：压缩必须保留可验证的重建语义；当压缩收益不足或超出约束时应回退到未压缩表示。
     size_t computeUncompressedSectionSize() const
     {
       size_t threadGroupSize = sizeof(shaderio::Group);
@@ -282,10 +239,8 @@ public:
   };
 
 
-  // 结构：GroupView。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
-  struct GroupView
+  // Non-owning view that decodes a packed group payload into typed spans without copying.
+struct GroupView
   {
     const uint8_t*                     raw     = nullptr;
     const size_t                       rawSize = 0;
@@ -324,9 +279,6 @@ public:
     }
 
 
-    // 函数：getClusterIndices。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     const uint8_t* getClusterIndices(size_t clusterIndex) const
     {
 
@@ -334,9 +286,6 @@ public:
     }
 
 
-    // 函数：getClusterVertices。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     const glm::vec3* getClusterVertices(size_t clusterIndex) const
     {
 
@@ -345,9 +294,6 @@ public:
   };
 
 
-  // 结构：GroupStorage。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct GroupStorage
   {
     uint8_t*                     raw;
@@ -391,9 +337,6 @@ public:
     }
 
 
-    // 函数：getClusterLocalData。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     uint32_t* getClusterLocalData(uint32_t clusterIndex, uint32_t localOffset)
     {
       return (uint32_t*)(size_t(&clusters[clusterIndex]) + localOffset);
@@ -410,15 +353,9 @@ public:
                                    size_t           dstSize);
 
 
-  // 函数：decompressGroup。执行压缩或解压流程，在体积和运行时访问格式之间做转换。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：压缩必须保留可验证的重建语义；当压缩收益不足或超出约束时应回退到未压缩表示。
   static void decompressGroup(const GroupInfo& info, const GroupView& groupView, void* dstWriteOnly, size_t dstSize);
 
 
-  // 结构：GeometryLodInput。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct GeometryLodInput
   {
     uint64_t inputTriangleCount       = 0;
@@ -429,9 +366,6 @@ public:
   };
 
 
-  // 结构：GeometryBase。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct GeometryBase
   {
     uint32_t attributeBits = 0;
@@ -461,9 +395,6 @@ public:
   };
 
 
-  // 结构：GeometryView。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct GeometryView : GeometryBase
   {
 
@@ -480,9 +411,6 @@ public:
     std::span<const uint32_t> localMaterialIDs;
 
 
-    // 函数：getCachedSize。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     inline uint64_t getCachedSize() const
     {
       uint64_t cachedSize = 0;
@@ -510,18 +438,12 @@ public:
   size_t              getActiveGeometryCount() const { return m_activeGeometryCount; }
 
 
-  // 函数：getGeometryInstanceFactor。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   uint32_t getGeometryInstanceFactor() const
   {
     return m_gridConfig.uniqueGeometriesForCopies ? 1u : uint32_t(m_instances.size() / m_originalInstanceCount);
   }
 
 
-  // 结构：Instance。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct Instance
   {
     glm::mat4      matrix;
@@ -551,9 +473,6 @@ public:
   };
 
 
-  // 结构：Camera。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct Camera
   {
     glm::mat4 worldMatrix{1};
@@ -564,9 +483,6 @@ public:
   };
 
 
-  // 结构：Histograms。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct Histograms
   {
     static const uint32_t version = 1;
@@ -699,10 +615,8 @@ public:
 private:
 
 
-  // 结构：GeometryStorage。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
-  struct GeometryStorage : GeometryBase
+  // Owning storage for one geometry while it is being imported, processed, and serialized.
+struct GeometryStorage : GeometryBase
   {
 
     std::vector<glm::vec3>  vertexPositions;
@@ -740,51 +654,27 @@ private:
   std::unordered_map<uint64_t, uint32_t> m_assemblyTemplateMap;
 
 
-  // 函数：loadCached。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
   static bool     loadCached(GeometryView& view, uint64_t dataSize, const void* data);
 
 
-  // 函数：storeCached。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
   static bool     storeCached(const GeometryView& view, uint64_t dataSize, void* data);
 
 
-  // 函数：storeCached。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
   static uint64_t storeCached(const GeometryView& view, FILE* outFile);
 
 
-  // 函数：openCache。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   void openCache();
 
 
-  // 函数：closeCache。释放或回收前面初始化的资源，保持生命周期成对管理。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
   void closeCache();
 
 
-  // 函数：checkCache。返回条件判断结果，用于调用方选择后续分支或验证输入状态。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：谓词函数应保持无副作用或低副作用，使调用方可以安全地把它用于断言、过滤和早退。
   bool checkCache(const GeometryLodInput& info, size_t geometryIndex);
 
 
-  // 函数：loadCachedGeometry。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
   void loadCachedGeometry(GeometryStorage& geometry, size_t geometryIndex);
 
 
-  // 类型：CacheFileHeader。封装本模块的长期状态、资源所有权和对外操作接口。
-  // 设计意图：通过成员函数集中维护状态转移，避免调用方直接拼接底层资源生命周期。
-  // 使用约束：实例初始化、每帧使用和释放应遵守声明顺序对应的依赖关系。
   class CacheFileHeader
   {
   public:
@@ -797,9 +687,6 @@ private:
     }
 
 
-    // 函数：isValid。返回条件判断结果，用于调用方选择后续分支或验证输入状态。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：谓词函数应保持无副作用或低副作用，使调用方可以安全地把它用于断言、过滤和早退。
     bool isValid() const
     {
       Header reference = {};
@@ -815,9 +702,6 @@ private:
   private:
 
 
-    // 结构：Header。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-    // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-    // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
     struct Header
     {
       uint64_t magic               = 0x006f65676e73766eULL;
@@ -846,9 +730,6 @@ private:
   static_assert(sizeof(CacheFileHeader) % serialization::ALIGNMENT == 0, "CacheFileHeader size unaligned");
 
 
-  // 类型：CacheFileView。封装本模块的长期状态、资源所有权和对外操作接口。
-  // 设计意图：通过成员函数集中维护状态转移，避免调用方直接拼接底层资源生命周期。
-  // 使用约束：实例初始化、每帧使用和释放应遵守声明顺序对应的依赖关系。
   class CacheFileView
   {
 
@@ -856,9 +737,6 @@ private:
 #if 0
 
 
-    // 结构：CacheFile。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-    // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-    // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
     struct CacheFile
     {
 
@@ -876,9 +754,6 @@ private:
     bool isValid() const { return m_dataSize != 0; }
 
 
-    // 函数：init。初始化本模块所需状态、资源或 GPU 侧绑定。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
     bool init(uint64_t dataSize, const void* data);
 
     void deinit() { *(this) = {}; }
@@ -886,23 +761,14 @@ private:
     uint64_t getGeometryCount() const { return m_geometryCount; }
 
 
-    // 函数：getSceneConfig。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     void getSceneConfig(SceneConfig& settings) const;
 
 
-    // 函数：getHistograms。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     void getHistograms(Histograms& histograms) const;
 
     void getProcessingStats(ProcessingStatsSnapshot& stats) const;
 
 
-    // 函数：getGeometryView。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     bool getGeometryView(GeometryView& view, uint64_t geometryIndex) const;
 
   private:
@@ -921,9 +787,6 @@ private:
   };
 
 
-  // 结构：CachePartialEntry。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct CachePartialEntry
   {
     uint64_t geometryIndex = 0;
@@ -947,10 +810,8 @@ private:
   std::vector<uint64_t> m_processingOnlyGeometryOffsets;
 
 
-  // 结构：ProcessingInfo。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
-  struct ProcessingInfo
+  // Shared progress, timing, threading, and compressed-buffer state for scene preprocessing.
+struct ProcessingInfo
   {
 
 
@@ -971,9 +832,6 @@ private:
     std::vector<uint32_t> bufferViewLocks;
 
 
-    // 结构：Stats。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-    // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-    // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
     struct Stats
     {
       std::atomic_uint64_t groups                = 0;
@@ -1033,56 +891,32 @@ private:
     }
 
 
-    // 函数：init。初始化本模块所需状态、资源或 GPU 侧绑定。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
     void init(float pct);
 
 
-    // 函数：setupParallelism。初始化本模块所需状态、资源或 GPU 侧绑定。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
     void setupParallelism(size_t geometryCount_, size_t geometryCompletedCount, int parallelismMode);
 
 
-    // 函数：setupCompressedGltf。初始化本模块所需状态、资源或 GPU 侧绑定。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
     void setupCompressedGltf(size_t bufferViewCount);
 
 
-    // 函数：deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
     void deinit();
 
 
-    // 函数：logBegin。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     void     logBegin(uint64_t totalTriangleCount);
 
     uint32_t logCompletedGeometry(uint64_t triangleCount = 0);
 
 
-    // 函数：logEnd。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     void     logEnd();
   };
 
 
-  // 函数：loadGLTF。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
   Result loadGLTF(ProcessingInfo& processingInfo, const std::filesystem::path& filePath);
 
 private:
 
 
-  // 函数：loadGeometryGLTF。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
   void loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIndex, size_t meshIndex, const struct cgltf_data* gltf);
 
   void loadSemanticLodPolicies();
@@ -1107,69 +941,36 @@ private:
                                  const struct cgltf_data*                       gltf);
 
 
-  // 函数：processGeometry。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   void processGeometry(ProcessingInfo& processingInfo, size_t geometryIndex, bool isCached);
 
 
-  // 函数：buildGeometryLod。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
   void buildGeometryLod(ProcessingInfo& processingInfo, GeometryStorage& geometry);
 
 
-  // 函数：buildHierarchy。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
   void buildHierarchy(ProcessingInfo& processingInfo, GeometryStorage& geometry);
 
 
-  // 函数：computeLodBboxes_recursive。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
   void computeLodBboxes_recursive(GeometryStorage& geometry, size_t nodeIdx);
 
 
-  // 函数：buildGeometryDedupVertices。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
   void buildGeometryDedupVertices(ProcessingInfo& processingInfo, GeometryStorage& geometry);
 
 
-  // 函数：computeHistogramMaxs。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
   void computeHistogramMaxs();
 
 
-  // 函数：computeInstanceBBoxes。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
   void computeInstanceBBoxes();
 
 
-  // 函数：beginProcessingOnly。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   void beginProcessingOnly(size_t geometryCount);
 
 
-  // 函数：saveProcessingOnly。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
   void saveProcessingOnly(ProcessingInfo& processingInfo, size_t geometryIndex);
 
 
-  // 函数：endProcessingOnly。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   bool endProcessingOnly(ProcessingInfo& processingInfo, bool hadError);
 
 
-  // 结构：TempContext。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct TempContext
   {
     ProcessingInfo&  processingInfo;
@@ -1192,9 +993,6 @@ private:
   };
 
 
-  // 结构：TempGroup。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct TempGroup
   {
     uint32_t                  lodLevel;
@@ -1203,9 +1001,6 @@ private:
   };
 
 
-  // 结构：TempCluster。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct TempCluster
   {
     const uint32_t* indices         = nullptr;
@@ -1221,15 +1016,9 @@ private:
                       const clodCluster* clusters);
 
 
-  // 函数：compressGroup。执行压缩或解压流程，在体积和运行时访问格式之间做转换。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：压缩必须保留可验证的重建语义；当压缩收益不足或超出约束时应回退到未压缩表示。
   void compressGroup(TempContext* context, GroupStorage& groupTempStorage, GroupInfo& groupInfo, uint32_t* vertexCacheLocal);
 
 
-  // 函数：clodIterationMeshoptimizer。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   static void clodIterationMeshoptimizer(void* iteration_context, void* output_context, int depth, size_t task_count);
   static int  clodGroupMeshoptimizer(void*              output_context,
                                      clodGroup          group,

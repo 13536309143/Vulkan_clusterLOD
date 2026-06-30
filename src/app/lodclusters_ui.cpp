@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/app/lodclusters_ui.cpp
-// 模块定位：ImGui 用户界面和统计面板实现，用于交互式调节渲染、遍历、流式加载和调试参数。
-// 数据流：输入是当前应用状态、GPU 回读数据 和 流式加载 stats；输出是参数修改、可视化面板和用户可读统计。
-// 方法说明：界面层承担实验观测职责，将 GPU 内部计数转化为可解释指标，辅助分析 LOD 遍历、驻留内存和光栅路径选择。
-// 正确性约束：UI 修改只应改变配置或触发重建标志，不应直接破坏 renderer/scene 生命周期；统计显示需容忍资源尚未初始化的空状态。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/app/lodclusters_ui.cpp
+// Builds the ImGui controls and viewport overlays for the sample.
+// UI edits are written to shadow config structs; the runtime step decides which changes require scene, streaming, or renderer rebuilds.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <cinttypes>
 #include <filesystem>
 #include <chrono>
@@ -26,19 +21,12 @@
 #include "lodclusters.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define MEMORY_WITH_BINARY_PREFIXES 1
 
 
-// 函数：formatMemorySize。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 std::string formatMemorySize(size_t sizeInBytes)
 {
 #if MEMORY_WITH_BINARY_PREFIXES
@@ -66,9 +54,6 @@ std::string formatMemorySize(size_t sizeInBytes)
 }
 
 
-// 函数：formatMetric。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 std::string formatMetric(size_t size)
 {
 
@@ -126,9 +111,6 @@ void uiPlot(const std::string& plotName, const std::string& tooltipFormat, const
 }
 
 
-// 函数：getUsagePct。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static uint32_t getUsagePct(uint64_t requested, uint64_t reserved)
 {
   bool     exceeds = requested > reserved;
@@ -140,9 +122,6 @@ static uint32_t getUsagePct(uint64_t requested, uint64_t reserved)
 }
 
 
-// 结构：UsagePercentages。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct UsagePercentages
 {
   uint32_t pctClusters  = 0;
@@ -151,9 +130,6 @@ struct UsagePercentages
   uint32_t pctGeoMemory = 0;
 
 
-  // 函数：setupPercentages。初始化本模块所需状态、资源或 GPU 侧绑定。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
   void setupPercentages(shaderio::Readback& readback, uint64_t maxRenderClusters, uint64_t maxTraversalTasks)
   {
     pctClusters = getUsagePct(readback.numRenderClusters, maxRenderClusters);
@@ -162,9 +138,6 @@ struct UsagePercentages
   }
 
 
-  // 函数：setupPercentages。初始化本模块所需状态、资源或 GPU 侧绑定。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
   void setupPercentages(StreamingStats& stats, const StreamingConfig& streamingConfig)
   {
     pctResident = uint32_t(double(stats.residentGroups) * 100.0 / double(stats.maxGroups));
@@ -172,9 +145,6 @@ struct UsagePercentages
   }
 
 
-  // 函数：getWarning。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   const char* getWarning()
   {
     if(pctClusters > 100)
@@ -190,9 +160,6 @@ struct UsagePercentages
 };
 
 
-// 函数：LodClusters::viewportUI。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void LodClusters::viewportUI(ImVec2 corner)
 {
 
@@ -257,9 +224,6 @@ void LodClusters::viewportUI(ImVec2 corner)
 void LodClusters::loadingUI() {}
 
 
-// 函数：LodClusters::onUIRender。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void LodClusters::onUIRender()
 {
 
@@ -275,9 +239,6 @@ void LodClusters::onUIRender()
     ImGui::OpenPopup("Busy Info");
 
 
-    // 函数：win_size。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     const ImVec2 win_size(300, 100);
 
     ImGui::SetNextWindowSize(win_size);
@@ -901,15 +862,11 @@ void LodClusters::onUIRender()
       size_t divisor = 1024 * 1024;
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define MEMORY_MB "MiB"
 #else
       size_t divisor = 1000000;
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define MEMORY_MB "MB"
 #endif
 
@@ -1617,9 +1574,6 @@ void LodClusters::onUIRender()
 }
 
 
-// 函数：LodClusters::onUIMenu。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void LodClusters::onUIMenu()
 {
 

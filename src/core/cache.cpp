@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/core/cache.cpp
-// 模块定位：Scene 缓存文件读写实现，负责几何运行时视图的序列化、校验、复用和离线处理保存。
-// 数据流：输入是已处理的 GeometryView 或缓存文件；输出是可直接接入 Scene 的数组视图和 offset table。
-// 方法说明：缓存机制把昂贵的 glTF 解析、LOD 构建和压缩结果持久化，使交互式渲染实验可以复现同一几何数据集。
-// 正确性约束：缓存配置必须与当前 SceneConfig 匹配；内存映射模式下不能复制后释放原映射；partial processing 要保证 offset table 一致。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/core/cache.cpp
+// Implements scene cache persistence for processed geometry, histograms, and preprocessing-only output.
+// The on-disk layout is consumed through spans and memory maps, so offsets, alignment, and config-version checks are part of the file format contract.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <nvutils/file_operations.hpp>
 #include <nvutils/parallel_work.hpp>
 #include <nvutils/file_mapping.hpp>
@@ -15,14 +10,9 @@
 #include "scene.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 
-// 函数：Scene::storeCached。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
 bool Scene::storeCached(const GeometryView& view, uint64_t dataSize, void* data)
 {
   uint64_t dataAddress = reinterpret_cast<uint64_t>(data);
@@ -49,9 +39,6 @@ bool Scene::storeCached(const GeometryView& view, uint64_t dataSize, void* data)
 }
 
 
-// 函数：fileWriteAligned。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
 static bool fileWriteAligned(uint64_t& outAccumulatedSize, FILE* outFile, size_t dataSize, const void* data)
 {
 
@@ -80,9 +67,6 @@ static bool fileWriteAligned(uint64_t& outAccumulatedSize, FILE* outFile, size_t
 template <typename T>
 
 
-// 函数：fileWriteAligned。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
 inline void fileWriteAligned(bool& isValid, uint64_t& outAccumulatedSize, FILE* outFile, const std::span<const T>& view)
 {
 
@@ -116,9 +100,6 @@ inline void fileWriteAligned(bool& isValid, uint64_t& outAccumulatedSize, FILE* 
 }
 
 
-// 函数：Scene::storeCached。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
 uint64_t Scene::storeCached(const GeometryView& view, FILE* outFile)
 {
   uint64_t dataSize = 0;
@@ -145,9 +126,6 @@ uint64_t Scene::storeCached(const GeometryView& view, FILE* outFile)
 }
 
 
-// 函数：Scene::loadCached。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
 bool Scene::loadCached(GeometryView& view, uint64_t dataSize, const void* data)
 {
   uint64_t dataAddress = reinterpret_cast<uint64_t>(data);
@@ -186,9 +164,6 @@ bool Scene::loadCached(GeometryView& view, uint64_t dataSize, const void* data)
 }
 
 
-// 函数：Scene::CacheFileView::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 bool Scene::CacheFileView::init(uint64_t dataSize, const void* data)
 {
   m_dataSize  = dataSize;
@@ -222,9 +197,6 @@ bool Scene::CacheFileView::init(uint64_t dataSize, const void* data)
 }
 
 
-// 函数：Scene::CacheFileView::getSceneConfig。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Scene::CacheFileView::getSceneConfig(SceneConfig& settings) const
 {
   const CacheFileHeader* cacheHeader = (const CacheFileHeader*)(m_dataBytes);
@@ -233,9 +205,6 @@ void Scene::CacheFileView::getSceneConfig(SceneConfig& settings) const
 }
 
 
-// 函数：Scene::CacheFileView::getHistograms。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Scene::CacheFileView::getHistograms(Histograms& histograms) const
 {
   const CacheFileHeader* cacheHeader = (const CacheFileHeader*)(m_dataBytes);
@@ -251,9 +220,6 @@ void Scene::CacheFileView::getProcessingStats(ProcessingStatsSnapshot& stats) co
 }
 
 
-// 函数：Scene::CacheFileView::getGeometryView。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 bool Scene::CacheFileView::getGeometryView(GeometryView& view, uint64_t geometryIndex) const
 {
   constexpr uint64_t ALIGN_MASK = serialization::ALIGNMENT - 1;
@@ -285,9 +251,6 @@ bool Scene::CacheFileView::getGeometryView(GeometryView& view, uint64_t geometry
 }
 
 
-// 函数：Scene::checkCache。返回条件判断结果，用于调用方选择后续分支或验证输入状态。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：谓词函数应保持无副作用或低副作用，使调用方可以安全地把它用于断言、过滤和早退。
 bool Scene::checkCache(const GeometryLodInput& info, size_t geometryIndex)
 {
   if(m_cacheFileView.isValid() && geometryIndex < m_cacheFileView.getGeometryCount())
@@ -306,9 +269,6 @@ bool Scene::checkCache(const GeometryLodInput& info, size_t geometryIndex)
 template <typename T>
 
 
-// 函数：fillVector。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static inline void fillVector(std::vector<T>& storageVec, const std::span<const T>& viewSpan)
 {
   storageVec.resize(viewSpan.size());
@@ -316,9 +276,6 @@ static inline void fillVector(std::vector<T>& storageVec, const std::span<const 
 }
 
 
-// 函数：Scene::loadCachedGeometry。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
 void Scene::loadCachedGeometry(GeometryStorage& storage, size_t geometryIndex)
 {
   GeometryView view = {};
@@ -341,9 +298,6 @@ void Scene::loadCachedGeometry(GeometryStorage& storage, size_t geometryIndex)
 }
 
 
-// 函数：Scene::openCache。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Scene::openCache()
 {
   if(m_cacheFileMapping.open(m_cacheFilePath))
@@ -377,9 +331,6 @@ void Scene::openCache()
 }
 
 
-// 函数：Scene::closeCache。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void Scene::closeCache()
 {
   if(m_cacheFileView.isValid())
@@ -392,9 +343,6 @@ void Scene::closeCache()
 }
 
 
-// 函数：Scene::saveCache。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
 bool Scene::saveCache() const
 {
   uint64_t dataOffset = sizeof(Scene::CacheFileHeader);
@@ -463,9 +411,6 @@ bool Scene::saveCache() const
 }
 
 
-// 函数：Scene::beginProcessingOnly。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Scene::beginProcessingOnly(size_t geometryCount)
 {
   if(!m_loaderConfig.processingOnly || m_cacheFileView.isValid())
@@ -573,18 +518,12 @@ void Scene::beginProcessingOnly(size_t geometryCount)
 }
 
 
-// 函数：Scene::saveProcessingOnly。把当前状态写入缓存、缓冲、文件或着色器可消费的数据布局。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：写入路径应明确字节对齐、所有权和可见性，避免后续读取端解释错误。
 void Scene::saveProcessingOnly(ProcessingInfo& processingInfo, size_t geometryIndex)
 {
   const uint64_t quantCacheStart = ProcessingInfo::timestampMicroseconds();
   {
 
 
-    // 函数：lock。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     std::lock_guard lock(processingInfo.processOnlySaveMutex);
 
 
@@ -613,9 +552,6 @@ void Scene::saveProcessingOnly(ProcessingInfo& processingInfo, size_t geometryIn
 }
 
 
-// 函数：Scene::endProcessingOnly。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 bool Scene::endProcessingOnly(ProcessingInfo& processingInfo, bool hadError)
 {
   if(!m_processingOnlyFile)

@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/renderer/resources.cpp
-// 模块定位：Vulkan 资源管理实现，创建和释放帧缓冲、临时命令、队列同步、着色器编译器和上传路径。
-// 数据流：输入是物理设备能力、窗口大小和资源请求；输出是可被 renderer 使用的 Vulkan 资源和同步状态。
-// 方法说明：实现层把 Vulkan 的底层状态机收敛为少量高层操作，降低 renderer 对同步细节的重复处理。
-// 正确性约束：图像 layout transition 必须匹配后续用途；staging 上传后要释放临时内存；统计内存应与分配路径同步更新。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/renderer/resources.cpp
+// Implements shared Vulkan resource lifetime and per-frame utility passes.
+// Framebuffer rebuilds, Hi-Z construction, temporary command submission, and memory accounting are kept outside renderer-specific code.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <volk.h>
 #include <nvutils/file_operations.hpp>
 #include <nvutils/logger.hpp>
@@ -17,23 +12,15 @@
 #include "resources.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 
-// 函数：Resources::beginFrame。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Resources::beginFrame(uint32_t cycleIndex)
 {
   m_cycleIndex = cycleIndex;
 }
 
 
-// 函数：Resources::postProcessFrame。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Resources::postProcessFrame(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler)
 {
 
@@ -86,9 +73,6 @@ void Resources::postProcessFrame(VkCommandBuffer cmd, const FrameConfig& frame, 
 void Resources::endFrame() {}
 
 
-// 函数：Resources::emptyFrame。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Resources::emptyFrame(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler)
 {
 
@@ -100,9 +84,6 @@ void Resources::emptyFrame(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::
 }
 
 
-// 函数：Resources::trackMemoryUsage。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Resources::trackMemoryUsage(VkDeviceSize size, VmaMemoryUsage usage)
 {
   m_memoryUsage.total += size;
@@ -128,9 +109,6 @@ void Resources::trackMemoryUsage(VkDeviceSize size, VmaMemoryUsage usage)
 }
 
 
-// 函数：Resources::logMemoryUsage。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Resources::logMemoryUsage() const
 {
 
@@ -153,9 +131,6 @@ void Resources::logMemoryUsage() const
 }
 
 
-// 函数：Resources::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void Resources::init(VkDevice device, VkPhysicalDevice physicalDevice, VkInstance instance, const nvvk::QueueInfo& queue, const nvvk::QueueInfo& queueTransfer)
 {
   m_device         = device;
@@ -332,9 +307,6 @@ void Resources::init(VkDevice device, VkPhysicalDevice physicalDevice, VkInstanc
 }
 
 
-// 函数：Resources::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void Resources::deinit()
 {
   NVVK_CHECK(vkDeviceWaitIdle(m_device));
@@ -376,9 +348,6 @@ void Resources::deinit()
 }
 
 
-// 函数：Resources::initFramebuffer。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 bool Resources::initFramebuffer(const VkExtent2D& windowSize, int supersample)
 {
 
@@ -568,9 +537,6 @@ bool Resources::initFramebuffer(const VkExtent2D& windowSize, int supersample)
 }
 
 
-// 函数：Resources::updateFramebufferRenderSizeDependent。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void Resources::updateFramebufferRenderSizeDependent(VkCommandBuffer cmd)
 {
   VkSampleCountFlagBits samplesUsed = VK_SAMPLE_COUNT_1_BIT;
@@ -716,9 +682,6 @@ void Resources::updateFramebufferRenderSizeDependent(VkCommandBuffer cmd)
 }
 
 
-// 函数：Resources::deinitFramebufferRenderSizeDependent。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void Resources::deinitFramebufferRenderSizeDependent()
 {
 
@@ -739,9 +702,6 @@ void Resources::deinitFramebufferRenderSizeDependent()
 }
 
 
-// 函数：Resources::deinitFramebuffer。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void Resources::deinitFramebuffer()
 {
   NVVK_CHECK(vkDeviceWaitIdle(m_device));
@@ -756,9 +716,6 @@ void Resources::deinitFramebuffer()
 }
 
 
-// 函数：Resources::getFramebufferWindow2RenderScale。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 glm::vec2 Resources::getFramebufferWindow2RenderScale() const
 {
   if(m_frameBuffer.supersample >= 720)
@@ -773,9 +730,6 @@ glm::vec2 Resources::getFramebufferWindow2RenderScale() const
 }
 
 
-// 函数：Resources::getReadbackData。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
 void Resources::getReadbackData(shaderio::Readback& readback)
 {
 
@@ -784,9 +738,6 @@ void Resources::getReadbackData(shaderio::Readback& readback)
 }
 
 
-// 函数：Resources::cmdBuildHiz。向命令缓冲录制 GPU 操作，并依赖外层调用者安排提交与同步。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该类函数只描述命令序列，不应假设命令已经立即执行。
 void Resources::cmdBuildHiz(VkCommandBuffer cmd, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler, uint32_t idx)
 {
 
@@ -834,9 +785,6 @@ bool Resources::compileShader(shaderc::SpvCompilationResult& compiled,
 }
 
 
-// 函数：Resources::createTempCmdBuffer。向命令缓冲录制 GPU 操作，并依赖外层调用者安排提交与同步。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该类函数只描述命令序列，不应假设命令已经立即执行。
 VkCommandBuffer Resources::createTempCmdBuffer()
 {
 
@@ -861,15 +809,9 @@ VkCommandBuffer Resources::createTempCmdBuffer()
   uint32_t newCount = m_cmdBufferCount * 2;
 
 
-  // 函数：newCmdBuffers。向命令缓冲录制 GPU 操作，并依赖外层调用者安排提交与同步。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该类函数只描述命令序列，不应假设命令已经立即执行。
   std::vector<VkCommandBuffer> newCmdBuffers(newCount);
 
 
-  // 函数：newCmdBuffersInUse。向命令缓冲录制 GPU 操作，并依赖外层调用者安排提交与同步。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该类函数只描述命令序列，不应假设命令已经立即执行。
   std::vector<bool> newCmdBuffersInUse(newCount, false);
 
 
@@ -906,9 +848,6 @@ VkCommandBuffer Resources::createTempCmdBuffer()
 }
 
 
-// 函数：Resources::tempSyncSubmit。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void Resources::tempSyncSubmit(VkCommandBuffer cmd)
 {
 
@@ -941,9 +880,6 @@ void Resources::tempSyncSubmit(VkCommandBuffer cmd)
 }
 
 
-// 函数：Resources::cmdBeginRendering。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void Resources::cmdBeginRendering(VkCommandBuffer cmd, bool hasSecondary, VkAttachmentLoadOp loadOpColor, VkAttachmentLoadOp loadOpDepth)
 {
   VkClearValue colorClear{.color = {m_bgColor.x, m_bgColor.y, m_bgColor.z, m_bgColor.w}};
@@ -994,9 +930,6 @@ void Resources::cmdBeginRendering(VkCommandBuffer cmd, bool hasSecondary, VkAtta
 }
 
 
-// 函数：Resources::cmdImageTransition。向命令缓冲录制 GPU 操作，并依赖外层调用者安排提交与同步。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该类函数只描述命令序列，不应假设命令已经立即执行。
 void Resources::cmdImageTransition(VkCommandBuffer cmd, nvvk::Image& rimg, VkImageAspectFlags aspects, VkImageLayout newLayout, bool needBarrier) const
 {
   if(newLayout == rimg.descriptor.imageLayout && !needBarrier)
@@ -1014,9 +947,6 @@ void Resources::cmdImageTransition(VkCommandBuffer cmd, nvvk::Image& rimg, VkIma
 }
 
 
-// 函数：Resources::getDeviceLocalHeapSize。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 VkDeviceSize Resources::getDeviceLocalHeapSize() const
 {
   const VkPhysicalDeviceMemoryProperties& memProperties = m_memoryProperties;
@@ -1045,18 +975,12 @@ VkDeviceSize Resources::getDeviceLocalHeapSize() const
 }
 
 
-// 函数：Resources::isBufferSizeValid。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 bool Resources::isBufferSizeValid(VkDeviceSize size) const
 {
   return size <= m_physicalDeviceInfo.properties13.maxBufferSize && size <= m_physicalDeviceInfo.properties11.maxMemoryAllocationSize;
 }
 
 
-// 函数：QueueState::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void QueueState::init(VkDevice device, VkQueue queue, uint32_t familyIndex, uint64_t initialValue)
 {
 
@@ -1081,9 +1005,6 @@ void QueueState::init(VkDevice device, VkQueue queue, uint32_t familyIndex, uint
 }
 
 
-// 函数：QueueState::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void QueueState::deinit()
 {
   if(!m_device)
@@ -1093,9 +1014,6 @@ void QueueState::deinit()
 }
 
 
-// 函数：QueueState::getWaitSubmit。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 VkSemaphoreSubmitInfo QueueState::getWaitSubmit(VkPipelineStageFlags2 stageMask, uint32_t deviceIndex ) const
 {
   VkSemaphoreSubmitInfo signalSubmitInfo{.sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -1109,9 +1027,6 @@ VkSemaphoreSubmitInfo QueueState::getWaitSubmit(VkPipelineStageFlags2 stageMask,
 }
 
 
-// 函数：QueueState::advanceSignalSubmit。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 VkSemaphoreSubmitInfo QueueState::advanceSignalSubmit(VkPipelineStageFlags2 stageMask, uint32_t deviceIndex )
 {
   VkSemaphoreSubmitInfo signalSubmitInfo{.sType       = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,

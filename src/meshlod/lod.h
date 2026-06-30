@@ -1,22 +1,14 @@
 //==============================================================================
-// 文件：src/meshlod/lod.h
-// 模块定位：旧版或合并式 header-only LOD 实现，集中包含构建、简化、聚类和局部索引相关逻辑。
-// 数据流：输入普通 mesh 数据；输出 簇/组/LOD 结构，可作为拆分后 meshlod_*.h 的参照实现。
-// 方法说明：该文件保留算法演化路径，便于对照拆分后的实现理解同一套 簇 LOD 构建思想。
-// 正确性约束：修改时需同步考虑拆分实现，避免同一算法存在语义分叉。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/meshlod/lod.h
+// Public C-style declarations for clustered LOD generation.
+// The types describe source mesh attributes, simplification settings, cluster bounds, and callback-based output.
 //==============================================================================
 #pragma once
 
 
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <stddef.h>
 
 
-// 结构：clodConfig。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct clodConfig
 {
 	size_t max_vertices;
@@ -43,9 +35,6 @@ struct clodConfig
 };
 
 
-// 结构：clodMesh。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct clodMesh
 {
 	const unsigned int* indices;
@@ -62,9 +51,6 @@ struct clodMesh
 };
 
 
-// 结构：clodBounds。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct clodBounds
 {
 	float center[3];
@@ -73,9 +59,6 @@ struct clodBounds
 };
 
 
-// 结构：clodCluster。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct clodCluster
 {
 	int refined;
@@ -86,9 +69,6 @@ struct clodCluster
 };
 
 
-// 结构：clodGroup。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct clodGroup
 {
 	int depth;
@@ -96,15 +76,9 @@ struct clodGroup
 };
 
 
-// 函数：int。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 typedef int (*clodOutput)(void* output_context, clodGroup group, const clodCluster* clusters, size_t cluster_count, size_t task_index, unsigned int thread_index);
 
 
-// 函数：void。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 typedef void (*clodIteration)(void* iteration_context, void* output_context, int depth, size_t task_count);
 #ifdef __cplusplus
 extern "C"
@@ -112,50 +86,29 @@ extern "C"
 #endif
 
 
-// 函数：clodDefaultConfig。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 clodConfig clodDefaultConfig(size_t max_triangles);
 
 
-// 函数：clodBuild。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 size_t clodBuild(clodConfig config, clodMesh mesh, void* output_context, clodOutput output_callback, clodIteration iteration_callback);
 
 
-// 函数：clodBuild_iterationTask。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 void clodBuild_iterationTask(void* iteration_context, void* output_context, size_t task_index, unsigned int thread_index);
 
 
-// 函数：clodLocalIndices。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 size_t clodLocalIndices(unsigned int* vertices, unsigned char* triangles, const unsigned int* indices, size_t index_count);
 #ifdef __cplusplus
 }
 template <typename Output>
 
 
-// 函数：clodBuild。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 size_t clodBuild(clodConfig config, clodMesh mesh, Output output)
 {
 
 
-	// 结构：Call。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-	// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-	// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 	struct Call
 	{
 
 
-		// 函数：output。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-		// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-		// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 		static int output(void* output_context, clodGroup group, const clodCluster* clusters, size_t cluster_count)
 		{
 			return (*static_cast<Output*>(output_context))(group, clusters, cluster_count);
@@ -178,9 +131,6 @@ namespace clod
 {
 
 
-// 结构：Cluster。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct Cluster
 {
 	size_t vertices;
@@ -191,9 +141,6 @@ struct Cluster
 };
 
 
-// 函数：boundsCompute。计算派生值，供后续剔除、LOD、统计或资源规划使用。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：计算结果通常参与阈值比较或内存规划，数值稳定性和边界条件需要特别注意。
 static clodBounds boundsCompute(const clodMesh& mesh, const std::vector<unsigned int>& indices, float error)
 {
 	meshopt_Bounds bounds = meshopt_computeClusterBounds(&indices[0], indices.size(), mesh.vertex_positions, mesh.vertex_count, mesh.vertex_positions_stride);
@@ -207,9 +154,6 @@ static clodBounds boundsCompute(const clodMesh& mesh, const std::vector<unsigned
 }
 
 
-// 函数：boundsMerge。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static clodBounds boundsMerge(const std::vector<Cluster>& clusters, const std::vector<int>& group)
 {
 
@@ -246,9 +190,6 @@ static clodBounds boundsMerge(const std::vector<Cluster>& clusters, const std::v
 }
 
 
-// 函数：clusterize。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static std::vector<Cluster> clusterize(const clodConfig& config, const clodMesh& mesh, const unsigned int* indices, size_t index_count)
 {
 
@@ -256,30 +197,18 @@ static std::vector<Cluster> clusterize(const clodConfig& config, const clodMesh&
 	size_t max_meshlets = meshopt_buildMeshletsBound(index_count, config.max_vertices, config.min_triangles);
 
 
-	// 函数：meshlets。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<meshopt_Meshlet> meshlets(max_meshlets);
 
 
-	// 函数：meshlet_vertices。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<unsigned int> meshlet_vertices(index_count);
 
 #if MESHOPTIMIZER_VERSION < 1000
 
 
-	// 函数：meshlet_triangles。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<unsigned char> meshlet_triangles(index_count + max_meshlets * 3);
 #else
 
 
-	// 函数：meshlet_triangles。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<unsigned char> meshlet_triangles(index_count);
 #endif
 
@@ -324,9 +253,6 @@ static std::vector<Cluster> clusterize(const clodConfig& config, const clodMesh&
 }
 
 
-// 函数：partition。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static std::vector<std::vector<int> > partition(const clodConfig& config, const clodMesh& mesh, const std::vector<Cluster>& clusters, const std::vector<int>& pending, const std::vector<unsigned int>& remap)
 {
 
@@ -336,9 +262,6 @@ static std::vector<std::vector<int> > partition(const clodConfig& config, const 
 	std::vector<unsigned int> cluster_indices;
 
 
-	// 函数：cluster_counts。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<unsigned int> cluster_counts(pending.size());
 	size_t total_index_count = 0;
 	for (size_t i = 0; i < pending.size(); ++i)
@@ -359,18 +282,12 @@ static std::vector<std::vector<int> > partition(const clodConfig& config, const 
 	}
 
 
-	// 函数：cluster_part。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<unsigned int> cluster_part(pending.size());
 
 	size_t partition_count = meshopt_partitionClusters(&cluster_part[0], &cluster_indices[0], cluster_indices.size(), &cluster_counts[0], cluster_counts.size(),
 	    config.partition_spatial ? mesh.vertex_positions : NULL, remap.size(), mesh.vertex_positions_stride, config.partition_size);
 
 
-	// 函数：partitions。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<std::vector<int> > partitions(partition_count);
 	for (size_t i = 0; i < partition_count; ++i)
 
@@ -382,9 +299,6 @@ static std::vector<std::vector<int> > partition(const clodConfig& config, const 
 	{
 
 
-		// 函数：partition_point。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-		// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-		// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 		std::vector<float> partition_point(partition_count * 3);
 		for (size_t i = 0; i < pending.size(); ++i)
 			memcpy(&partition_point[cluster_part[i] * 3], clusters[pending[i]].bounds.center, sizeof(float) * 3);
@@ -402,9 +316,6 @@ static std::vector<std::vector<int> > partition(const clodConfig& config, const 
 }
 
 
-// 函数：lockBoundary。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static void lockBoundary(std::vector<unsigned char>& locks, const std::vector<std::vector<int> >& groups, const std::vector<Cluster>& clusters, const std::vector<unsigned int>& remap, const unsigned char* vertex_lock)
 {
 
@@ -453,9 +364,6 @@ static void lockBoundary(std::vector<unsigned char>& locks, const std::vector<st
 }
 
 
-// 结构：SloppyVertex。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct SloppyVertex
 {
 	float x, y, z;
@@ -463,22 +371,13 @@ struct SloppyVertex
 };
 
 
-// 函数：simplifyFallback。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static void simplifyFallback(std::vector<unsigned int>& lod, const clodMesh& mesh, const std::vector<unsigned int>& indices, const std::vector<unsigned char>& locks, size_t target_count, float* error)
 {
 
 
-	// 函数：subset。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<SloppyVertex> subset(indices.size());
 
 
-	// 函数：subset_locks。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<unsigned char> subset_locks(indices.size());
 	lod.resize(indices.size());
 
@@ -509,9 +408,6 @@ static void simplifyFallback(std::vector<unsigned int>& lod, const clodMesh& mes
 }
 
 
-// 函数：simplify。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static std::vector<unsigned int> simplify(const clodConfig& config, const clodMesh& mesh, const std::vector<unsigned int>& indices, const std::vector<unsigned char>& locks, size_t target_count, float* error)
 {
 
@@ -519,9 +415,6 @@ static std::vector<unsigned int> simplify(const clodConfig& config, const clodMe
 		return indices;
 
 
-	// 函数：lod。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<unsigned int> lod(indices.size());
 
 	unsigned int options = meshopt_SimplifySparse | meshopt_SimplifyErrorAbsolute | (config.simplify_permissive ? meshopt_SimplifyPermissive : 0) | (config.simplify_regularize ? meshopt_SimplifyRegularize : 0);
@@ -575,16 +468,10 @@ static std::vector<unsigned int> simplify(const clodConfig& config, const clodMe
 }
 
 
-// 函数：outputGroup。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 static int outputGroup(const clodConfig& config, const clodMesh& mesh, const std::vector<Cluster>& clusters, const std::vector<int>& group, const clodBounds& simplified, int depth, void* output_context, clodOutput output_callback, size_t task_index, unsigned int thread_index)
 {
 
 
-	// 函数：group_clusters。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-	// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-	// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 	std::vector<clodCluster> group_clusters(group.size());
 
 	for (size_t i = 0; i < group.size(); ++i)
@@ -606,9 +493,6 @@ static int outputGroup(const clodConfig& config, const clodMesh& mesh, const std
 }
 
 
-// 结构：IterationContext。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct IterationContext
 {
 	clodConfig config;
@@ -628,9 +512,6 @@ struct IterationContext
 }
 
 
-// 函数：clodDefaultConfig。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 clodConfig clodDefaultConfig(size_t max_triangles)
 {
 
@@ -664,9 +545,6 @@ clodConfig clodDefaultConfig(size_t max_triangles)
 }
 
 
-// 函数：clodBuild_iterationTask。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 void clodBuild_iterationTask(void* iteration_context, void* output_context, size_t i, unsigned int thread_index)
 {
 	using namespace clod;
@@ -755,9 +633,6 @@ void clodBuild_iterationTask(void* iteration_context, void* output_context, size
 }
 
 
-// 函数：clodBuild。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
 size_t clodBuild(clodConfig config, clodMesh mesh, void* output_context, clodOutput output_callback, clodIteration iteration_callback)
 {
 	using namespace clod;
@@ -866,9 +741,6 @@ size_t clodBuild(clodConfig config, clodMesh mesh, void* output_context, clodOut
 }
 
 
-// 函数：clodLocalIndices。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 size_t clodLocalIndices(unsigned int* vertices, unsigned char* triangles, const unsigned int* indices, size_t index_count)
 {
 	size_t unique = 0;
@@ -877,9 +749,6 @@ size_t clodLocalIndices(unsigned int* vertices, unsigned char* triangles, const 
 	static constexpr size_t CACHE_SIZE = 4096;
 
 
-	// 结构：CacheEntry。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-	// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-	// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 	struct CacheEntry {
 		unsigned int vertex_id;
 		unsigned short local_index;

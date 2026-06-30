@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/scene/scene_gltf.cpp
-// 模块定位：glTF 导入实现，通过 cgltf 读取几何、材质、相机、节点层级和 meshopt 压缩 缓冲 view。
-// 数据流：输入是 glTF/glb 文件和 SceneLoaderConfig；输出是去重后的 GeometryStorage、材质索引、实例矩阵和相机列表。
-// 方法说明：glTF 是语义丰富但渲染布局松散的交换格式，本文件将 accessor、缓冲 view 和 node transform 规约为项目内部统一表示。
-// 正确性约束：accessor 类型和 stride 必须严格校验；压缩 view 的生命周期要覆盖读取过程；坐标、法线、切线和 UV 量化需与后续压缩一致。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/scene/scene_gltf.cpp
+// Imports glTF data into the scene preprocessing pipeline.
+// The loader handles cgltf I/O, mesh fingerprints, compressed buffer views, instance transforms, and assembly assignment before LOD construction.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <float.h>
 #include <algorithm>
 #include <cmath>
@@ -26,9 +21,6 @@
 namespace {
 
 
-// 类型：SpinLock。封装本模块的长期状态、资源所有权和对外操作接口。
-// 设计意图：通过成员函数集中维护状态转移，避免调用方直接拼接底层资源生命周期。
-// 使用约束：实例初始化、每帧使用和释放应遵守声明顺序对应的依赖关系。
 class SpinLock
 {
 public:
@@ -161,16 +153,10 @@ uint64_t computeAssemblyTemplateFingerprint(const std::vector<lodclusters::Scene
 }
 
 
-// 结构：FileMappingList。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct FileMappingList
 {
 
 
-  // 结构：Entry。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
   struct Entry
   {
     nvutils::FileReadMapping mapping;
@@ -183,9 +169,6 @@ struct FileMappingList
 #endif
 
 
-  // 函数：open。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   bool open(const char* path, size_t* size, void** data)
   {
 #ifndef NDEBUG
@@ -193,9 +176,6 @@ struct FileMappingList
 #endif
 
 
-    // 函数：pathStr。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     std::string pathStr(path);
 
 
@@ -226,9 +206,6 @@ struct FileMappingList
   }
 
 
-  // 函数：close。释放或回收前面初始化的资源，保持生命周期成对管理。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
   void close(void* data)
   {
 #ifndef NDEBUG
@@ -282,9 +259,6 @@ cgltf_result cgltf_read(const struct cgltf_memory_options* memory_options,
 }
 
 
-// 函数：cgltf_release。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void cgltf_release(const struct cgltf_memory_options* memory_options, const struct cgltf_file_options* file_options, void* data)
 {
   FileMappingList* mappings = (FileMappingList*)file_options->user_data;
@@ -294,9 +268,6 @@ void cgltf_release(const struct cgltf_memory_options* memory_options, const stru
 using unique_cgltf_ptr = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
 
-// 函数：quantizeFloat。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 inline float quantizeFloat(float value, uint32_t dropBits)
 {
   union
@@ -321,9 +292,6 @@ inline float quantizeFloat(float value, uint32_t dropBits)
 }
 
 
-// 函数：quantizeFloat。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 inline glm::vec2 quantizeFloat(const glm::vec2& vec, uint32_t dropBits)
 {
   glm::vec2 res;
@@ -335,9 +303,6 @@ inline glm::vec2 quantizeFloat(const glm::vec2& vec, uint32_t dropBits)
 }
 
 
-// 函数：quantizeFloat。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 inline glm::vec3 quantizeFloat(const glm::vec3& vec, uint32_t dropBits)
 {
   glm::vec3 res;
@@ -351,9 +316,6 @@ inline glm::vec3 quantizeFloat(const glm::vec3& vec, uint32_t dropBits)
 }
 
 
-// 函数：quantizeFloat。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 inline glm::vec4 quantizeFloat(const glm::vec4& vec, uint32_t dropBits)
 {
   glm::vec4 res;
@@ -629,14 +591,9 @@ GeometryFingerprint computeGeometryFingerprint(const cgltf_mesh& mesh, const lod
 }
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 
-// 函数：Scene::loadGLTF。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
 Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesystem::path& filePath)
 {
 
@@ -704,9 +661,6 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
   std::vector<size_t> taskToGeometry;
 
 
-  // 函数：meshToGeometry。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   std::vector<size_t> meshToGeometry(gltf->meshes_count, -1);
 
   uint64_t totalTriangleCount = 0;
@@ -876,9 +830,6 @@ Scene::Result Scene::loadGLTF(ProcessingInfo& processingInfo, const std::filesys
         cam.fovy = gltf->nodes[nodeIdx].camera->data.perspective.yfov;
 
 
-        // 函数：worldNodeTransform。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-        // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-        // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
         glm::mat4 worldNodeTransform(1);
         cgltf_node_transform_world(&gltf->nodes[nodeIdx], glm::value_ptr(cam.worldMatrix));
 
@@ -907,9 +858,6 @@ Scene::GltfNodeImportResult Scene::addInstancesFromNodeGLTF(const std::vector<si
   result.bbox          = makeEmptyBBox();
 
 
-  // 函数：localNodeTransform。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
   glm::mat4 localNodeTransform(1);
   cgltf_node_transform_local(node, glm::value_ptr(localNodeTransform));
   const glm::mat4 nodeObjToWorldTransform = parentObjToWorldTransform * localNodeTransform;
@@ -1059,9 +1007,6 @@ bool Scene::loadCompressedViewsGLTF(ProcessingInfo&                             
     size_t bufferViewIndex = bufferView - gltf->buffer_views;
 
 
-    // 函数：lock。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     SpinLock lock((std::atomic_uint32_t&)processingInfo.bufferViewLocks[bufferViewIndex]);
 
     uint32_t users = processingInfo.bufferViewUsers[bufferViewIndex];
@@ -1156,9 +1101,6 @@ void Scene::unloadCompressedViewsGLTF(ProcessingInfo&                           
     size_t bufferViewIndex = bufferView - gltf->buffer_views;
 
 
-    // 函数：lock。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-    // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-    // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
     SpinLock lock((std::atomic_uint32_t&)processingInfo.bufferViewLocks[bufferViewIndex]);
 
     uint32_t users = processingInfo.bufferViewUsers[bufferViewIndex]--;
@@ -1231,9 +1173,6 @@ inline void readAttributesGLTF(const cgltf_accessor* accessor,
 }
 
 
-// 函数：Scene::loadGeometryGLTF。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
 void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIndex, size_t meshIndex, const struct cgltf_data* gltf)
 {
 

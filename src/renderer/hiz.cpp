@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/renderer/hiz.cpp
-// 模块定位：Hi-Z 生成器实现，创建 mip view、更新描述符并 调度 计算着色器生成层级深度。
-// 数据流：输入是当前深度图和配置；输出是 near/far 层级深度纹理。
-// 方法说明：计算着色器逐层归约深度，使后续遍历可在 簇 或 bbox 粒度快速判定遮挡。
-// 正确性约束：源深度图 layout 必须可采样；每层 image view 要在图像销毁前释放；调度 尺寸覆盖所有目标 mip texel。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/renderer/hiz.cpp
+// Implements hierarchical-Z image allocation, descriptor updates, and reduction dispatch.
+// The generated depth pyramid is sampled by traversal shaders for conservative occlusion tests.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <cassert>
 #include <volk.h>
 #include <fmt/format.h>
@@ -15,9 +10,6 @@
 static const VkFormat NVHIZ_FORMAT = VK_FORMAT_R32_SFLOAT;
 
 
-// 函数：NVHizVK::TextureInfo::getShaderFactors。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void NVHizVK::TextureInfo::getShaderFactors(float factors[4]) const
 {
 
@@ -31,18 +23,12 @@ void NVHizVK::TextureInfo::getShaderFactors(float factors[4]) const
 }
 
 
-// 函数：NVHizVK::TextureInfo::getSizeMax。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 float NVHizVK::TextureInfo::getSizeMax() const
 {
   return float(std::max(width, height));
 }
 
 
-// 函数：NVHizVK::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void NVHizVK::deinit()
 {
   if(!m_device)
@@ -73,9 +59,6 @@ void NVHizVK::deinit()
 }
 
 
-// 函数：NVHizVK::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void NVHizVK::init(VkDevice device, const Config& config, uint32_t descrSetsCount)
 {
 
@@ -234,18 +217,12 @@ void NVHizVK::init(VkDevice device, const Config& config, uint32_t descrSetsCoun
 }
 
 
-// 函数：NVHizVK::getReadFarSampler。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
 VkSampler NVHizVK::getReadFarSampler() const
 {
   return m_readFarSampler;
 }
 
 
-// 函数：NVHizVK::getDescriptorPoolSizes。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 const VkDescriptorPoolSize* NVHizVK::getDescriptorPoolSizes(uint32_t& count) const
 {
   count = POOLSIZE_COUNT;
@@ -253,18 +230,12 @@ const VkDescriptorPoolSize* NVHizVK::getDescriptorPoolSizes(uint32_t& count) con
 }
 
 
-// 函数：NVHizVK::getDescriptorSetLayout。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 VkDescriptorSetLayout NVHizVK::getDescriptorSetLayout() const
 {
   return m_descrLayout;
 }
 
 
-// 函数：NVHizVK::appendShaderDefines。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void NVHizVK::appendShaderDefines(uint32_t shader, shaderc::CompileOptions& options) const
 {
   ProgHizMode  hiz;
@@ -283,9 +254,6 @@ void NVHizVK::appendShaderDefines(uint32_t shader, shaderc::CompileOptions& opti
 }
 
 
-// 函数：NVHizVK::deinitPipelines。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void NVHizVK::deinitPipelines()
 {
   if(!m_device)
@@ -304,9 +272,6 @@ void NVHizVK::deinitPipelines()
 }
 
 
-// 函数：NVHizVK::initPipelines。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void NVHizVK::initPipelines(const shaderc::SpvCompilationResult spvResults[SHADER_COUNT])
 {
 
@@ -334,9 +299,6 @@ void NVHizVK::initPipelines(const shaderc::SpvCompilationResult spvResults[SHADE
 }
 
 
-// 函数：NVHizVK::setupUpdateInfos。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void NVHizVK::setupUpdateInfos(Update& update, uint32_t width, uint32_t height, VkFormat sourceFormat, VkImageAspectFlags sourceAspect) const
 {
   {
@@ -388,9 +350,6 @@ void NVHizVK::setupUpdateInfos(Update& update, uint32_t width, uint32_t height, 
 }
 
 
-// 函数：NVHizVK::setupDescriptorUpdate。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void NVHizVK::setupDescriptorUpdate(DescriptorUpdate& write, const Update& update, VkDescriptorSet set) const
 {
   for(uint32_t i = 0; i < BINDING_COUNT; i++)
@@ -446,9 +405,6 @@ void NVHizVK::setupDescriptorUpdate(DescriptorUpdate& write, const Update& updat
 }
 
 
-// 函数：NVHizVK::updateDescriptorSet。根据最新状态刷新缓存数据、GPU 地址、描述符或统计信息。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：更新函数负责把“旧状态”推进到“当前状态”，因此要避免部分更新造成 CPU/GPU 视图不一致。
 void NVHizVK::updateDescriptorSet(const Update& update, uint32_t setIdx) const
 {
   DescriptorUpdate write;
@@ -459,9 +415,6 @@ void NVHizVK::updateDescriptorSet(const Update& update, uint32_t setIdx) const
 }
 
 
-// 函数：NVHizVK::initUpdateViews。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void NVHizVK::initUpdateViews(Update& update) const
 {
 
@@ -525,9 +478,6 @@ void NVHizVK::initUpdateViews(Update& update) const
 }
 
 
-// 函数：NVHizVK::deinitUpdateViews。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void NVHizVK::deinitUpdateViews(Update& update) const
 {
   if(!m_device)
@@ -566,9 +516,6 @@ void NVHizVK::deinitUpdateViews(Update& update) const
 }
 
 
-// 函数：NVHizVK::cmdUpdateHiz。向命令缓冲录制 GPU 操作，并依赖外层调用者安排提交与同步。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该类函数只描述命令序列，不应假设命令已经立即执行。
 void NVHizVK::cmdUpdateHiz(VkCommandBuffer cmd, const Update& update, VkDescriptorSet set) const
 {
   uint32_t inputW = update.sourceInfo.usedWidth;

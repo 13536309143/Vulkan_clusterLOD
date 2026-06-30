@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/scene/clusterlod.cpp
-// 模块定位：簇 LOD 构建桥接，把 Scene 几何体输入 meshlod 算法并生成 GPU 遍历所需层次结构。
-// 数据流：输入是 GeometryStorage 与 SceneConfig；输出是 组 storage、簇 payload、LOD level、node hierarchy 和 traversal metric。
-// 方法说明：该文件实现从三角网格到簇级细节层次的转换：局部簇保证小批量渲染，组保证流式一致性，层次树保证 GPU 可并行剪枝。
-// 正确性约束：簇 顶点和三角形上限必须满足 着色器 编译宏；node/组 bitfield 布局必须与 着色器io::Node 精确一致。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/scene/clusterlod.cpp
+// Bridges scene geometry storage to the clustered LOD builder output callbacks.
+// The code packs generated groups into the runtime layout used by cache files, preloading, streaming, and shaders.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <glm/gtc/constants.hpp>
 #include <nvutils/logger.hpp>
 #include <nvutils/parallel_work.hpp>
@@ -16,16 +11,11 @@
 #include "attribute_encoding.h"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
    template <typename T0, typename T1>
 
 
-   // 函数：padZeroes。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-   // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
    void padZeroes(std::span<T0>& previous, T1* next)
    {
      {
@@ -57,27 +47,15 @@ namespace lodclusters {
      Scene::GroupInfo groupTempInfo = context->threadGroupInfo;
 
 
-     // 函数：groupTempStorage。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-     // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-     // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
      GroupStorage     groupTempStorage(groupTempData, groupTempInfo);
 
 
-     // 函数：vertexCacheEarlyValue。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-     // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-     // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
      std::span<uint32_t> vertexCacheEarlyValue((uint32_t*)(groupTempData + context->threadGroupStorageSize), 256);
 
 
-     // 函数：vertexCacheEarlyPos。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-     // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-     // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
      std::span<uint32_t> vertexCacheEarlyPos((uint32_t*)vertexCacheEarlyValue.data() + 256, 256);
 
 
-     // 函数：vertexCacheLocal。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-     // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-     // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
      std::span<uint32_t> vertexCacheLocal(vertexCacheEarlyPos.data() + 256, m_config.clusterGroupSize * m_config.clusterVertices);
      uint32_t       clusterMaxVerticesCount = 0;
      uint32_t       clusterMaxTrianglesCount = 0;
@@ -349,9 +327,6 @@ namespace lodclusters {
      {
 
 
-       // 函数：lock。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-       // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-       // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
        std::lock_guard lock(context->groupMutex);
 
 
@@ -424,9 +399,6 @@ namespace lodclusters {
        {
 
 
-         // 函数：groupStorage。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-         // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-         // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
          GroupStorage groupStorage(&geometry.groupData[groupInfo.offsetBytes], groupInfo);
 
          size_t startAddress = size_t(groupStorage.group);
@@ -473,9 +445,6 @@ namespace lodclusters {
   }
 
 
-   // 函数：Scene::clodIterationMeshoptimizer。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-   // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
    void Scene::clodIterationMeshoptimizer(void* intermediate_context, void* output_context, int depth, size_t task_count)
    {
      TempContext*     context  = reinterpret_cast<TempContext*>(output_context);
@@ -498,9 +467,6 @@ namespace lodclusters {
    }
 
 
-   // 函数：Scene::clodGroupMeshoptimizer。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-   // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
    int Scene::clodGroupMeshoptimizer(void* output_context, clodGroup group, const clodCluster* clusters, size_t cluster_count, size_t task_index, uint32_t thread_index)
    {
      TempContext*     context  = reinterpret_cast<TempContext*>(output_context);
@@ -512,9 +478,6 @@ namespace lodclusters {
    }
 
 
-   // 函数：Scene::buildGeometryLod。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-   // 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
    void Scene::buildGeometryLod(ProcessingInfo& processingInfo, GeometryStorage& geometry)
    {
 
@@ -689,9 +652,6 @@ namespace lodclusters {
    }
 
 
-   // 函数：Scene::buildHierarchy。构建派生数据结构，通常用于 LOD、层次结构、间接命令或加速访问。
-   // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-   // 设计要点：构建结果会被后续阶段高频读取，必须保证布局紧凑、索引合法并与共享结构定义一致。
    void Scene::buildHierarchy(ProcessingInfo& processingInfo, GeometryStorage& geometry)
    {
 
@@ -699,9 +659,6 @@ namespace lodclusters {
      uint32_t lodLevelCount = geometry.lodLevelsCount;
 
 
-     // 函数：lodNodeRanges。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-     // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-     // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
      std::vector<Range> lodNodeRanges(lodLevelCount);
      {
        uint32_t nodeOffset = 1 + lodLevelCount;
@@ -743,9 +700,6 @@ lodLevelCount,[&](uint64_t idx, uint32_t threadInnerIdx)
          const GroupInfo& groupInfo = geometry.groupInfos[groupID];
 
 
-         // 函数：groupView。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-         // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-         // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
          GroupView        groupView(geometry.groupData, groupInfo);
 
          shaderio::Node& node = nodeCount == 1 ? geometry.lodNodes[1 + lodLevel] : geometry.lodNodes[nodeOffset++];

@@ -1,10 +1,7 @@
 //==============================================================================
-// 文件：shaders/common/culling_constants.inc
-// 模块定位：着色器公共函数片段，集中提供属性编码、剔除、屏幕空间估计和着色辅助逻辑。
-// 数据流：多个计算、网格和片元阶段通过 include 复用这些函数，避免同一数学逻辑在不同阶段分叉。
-// 方法说明：公共函数将几何、可见性和材质计算标准化，使 traversal 与 render 对同一对象得到一致判断。
-// 正确性约束：公共函数不能依赖某个单独 阶段 的私有状态；所有宏开关都应有明确默认值。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// shaders/common/culling_constants.inc
+// Shared culling mode constants.
+// These flags select which conservative tests are compiled into traversal and render shaders.
 //==============================================================================
 const float c_epsilon    = 1.2e-07f;
 

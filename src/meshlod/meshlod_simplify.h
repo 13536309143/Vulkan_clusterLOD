@@ -1,8 +1,7 @@
 //==============================================================================
-// 文件：src/meshlod/meshlod_simplify.h
-// 模块定位：meshoptimizer 原始风格的 LOD 简化路径，只保留边界锁、属性权重和回退简化。
-// 数据流：输入当前 LOD group 的索引、顶点和属性；输出降低复杂度后的索引和简化误差。
-// 方法说明：本文件刻意不再使用孔洞、薄壁、圆柱、功能区等人工特征约束，回到基础 cluster LOD 生成策略。
+// src/meshlod/meshlod_simplify.h
+// Runs feature-aware mesh simplification on clustered LOD input.
+// The analysis computes semantic and geometric locks, then falls back to baseline meshoptimizer simplification when constraints are too tight.
 //==============================================================================
 #pragma once
 

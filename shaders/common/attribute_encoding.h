@@ -1,69 +1,44 @@
 //==============================================================================
-// 文件：shaders/common/attribute_encoding.h
-// 模块定位：着色器公共函数片段，集中提供属性编码、剔除、屏幕空间估计和着色辅助逻辑。
-// 数据流：多个计算、网格和片元阶段通过 include 复用这些函数，避免同一数学逻辑在不同阶段分叉。
-// 方法说明：公共函数将几何、可见性和材质计算标准化，使 traversal 与 render 对同一对象得到一致判断。
-// 正确性约束：公共函数不能依赖某个单独 阶段 的私有状态；所有宏开关都应有明确默认值。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// shaders/common/attribute_encoding.h
+// Cross-language attribute packing helpers for normals and tangents.
+// C++ and GLSL compile the same formulas so offline compression and shader decoding stay bit-compatible.
 //==============================================================================
 #ifndef _ATTRIBUTE_ENCODING_H_
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define _ATTRIBUTE_ENCODING_H_
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_PI           3.14159265358979323846f
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_NORMAL_BITS  22
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_TANGENT_BITS 10
 
 
 #ifdef __cplusplus
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace shaderio {
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_INLINE inline
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_OUT(a) a&
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_ATAN2F atan2f
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_FLOOR  glm::floor
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_CLAMP  glm::clamp
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_ABS    glm::abs
 
 
@@ -71,48 +46,30 @@ static_assert(ATTRENC_NORMAL_BITS % 2 == 0, "Normal bits must be an even number"
 #else
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_INLINE
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_OUT(a) out a
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_ATAN2F atan
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_FLOOR  floor
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_CLAMP  clamp
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define ATTRENC_ABS    abs
 #endif
 
 
-// 函数：oct_signNotZero。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 ATTRENC_INLINE vec2 oct_signNotZero(vec2 v) {
     return vec2((v.x >= 0.0f) ? 1.0f : -1.0f, (v.y >= 0.0f) ? 1.0f : -1.0f);
 }
 
 
-// 函数：oct_to_vec。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 ATTRENC_INLINE vec3 oct_to_vec(vec2 e) {
 
     vec3 v = vec3(e.x, e.y, 1.0f - ATTRENC_ABS(e.x) - ATTRENC_ABS(e.y));
@@ -127,9 +84,6 @@ ATTRENC_INLINE vec3 oct_to_vec(vec2 e) {
 }
 
 
-// 函数：vec_to_oct。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 ATTRENC_INLINE vec2 vec_to_oct(vec3 v) {
 
     vec2 p = vec2(v.x, v.y) * (1.0f / (ATTRENC_ABS(v.x) + ATTRENC_ABS(v.y) + ATTRENC_ABS(v.z)));
@@ -138,9 +92,6 @@ ATTRENC_INLINE vec2 vec_to_oct(vec3 v) {
 }
 
 
-// 函数：vec_to_oct_precise。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 ATTRENC_INLINE vec2 vec_to_oct_precise(vec3 v, int bits) {
 
     vec2 s = vec_to_oct(v);
@@ -169,9 +120,6 @@ ATTRENC_INLINE vec2 vec_to_oct_precise(vec3 v, int bits) {
 }
 
 
-// 函数：normal_pack。在紧凑编码和逻辑结构之间转换，减少带宽或便于着色器访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：编码位宽、符号位和特殊值必须与写入端/读取端完全一致，否则会产生难以定位的跨阶段错误。
 ATTRENC_INLINE uint32_t normal_pack(vec3 normal) {
     const int      halfBits = ATTRENC_NORMAL_BITS / 2;
     const uint32_t mask = (1 << halfBits) - 1;
@@ -185,9 +133,6 @@ ATTRENC_INLINE uint32_t normal_pack(vec3 normal) {
 }
 
 
-// 函数：normal_unpack。在紧凑编码和逻辑结构之间转换，减少带宽或便于着色器访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：编码位宽、符号位和特殊值必须与写入端/读取端完全一致，否则会产生难以定位的跨阶段错误。
 ATTRENC_INLINE vec3 normal_unpack(uint32_t packed) {
     const int      halfBits = ATTRENC_NORMAL_BITS / 2;
     const uint32_t mask = (1 << halfBits) - 1;
@@ -201,9 +146,6 @@ ATTRENC_INLINE vec3 normal_unpack(uint32_t packed) {
 }
 
 
-// 函数：tangent_orthonormalBasis。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 ATTRENC_INLINE void tangent_orthonormalBasis(vec3 normal, ATTRENC_OUT(vec3) tangent, ATTRENC_OUT(vec3) bitangent) {
 
     if (normal.z < -0.99998796f) {
@@ -223,9 +165,6 @@ ATTRENC_INLINE void tangent_orthonormalBasis(vec3 normal, ATTRENC_OUT(vec3) tang
 }
 
 
-// 函数：tangent_pack。在紧凑编码和逻辑结构之间转换，减少带宽或便于着色器访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：编码位宽、符号位和特殊值必须与写入端/读取端完全一致，否则会产生难以定位的跨阶段错误。
 ATTRENC_INLINE uint32_t tangent_pack(vec3 normal, vec4 tangent) {
 
     const uint32_t mask = (1 << (ATTRENC_TANGENT_BITS - 1)) - 1;
@@ -245,9 +184,6 @@ ATTRENC_INLINE uint32_t tangent_pack(vec3 normal, vec4 tangent) {
 }
 
 
-// 函数：tangent_unpack。在紧凑编码和逻辑结构之间转换，减少带宽或便于着色器访问。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：编码位宽、符号位和特殊值必须与写入端/读取端完全一致，否则会产生难以定位的跨阶段错误。
 ATTRENC_INLINE vec4 tangent_unpack(vec3 normal, uint32_t encoded) {
     const uint32_t mask = (1 << (ATTRENC_TANGENT_BITS - 1)) - 1;
 

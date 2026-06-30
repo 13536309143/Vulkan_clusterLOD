@@ -1,13 +1,8 @@
 //==============================================================================
-// 文件：src/renderer/renderer.cpp
-// 模块定位：渲染器公共实现，负责实例数据上传、基础着色器和 管线、背景、bbox 与软件光栅合并绘制。
-// 数据流：输入是 Scene/RenderScene 和资源对象；输出是 render instance 缓冲、基础 管线 和调试绘制命令。
-// 方法说明：公共实现提供所有渲染器共享的观察和合成能力，使核心 LOD renderer 可以专注于 簇 选择与绘制。
-// 正确性约束：实例矩阵、材质和 geometry 映射必须与 Scene active geometry 一致；atomic resolve 只在软件光栅路径启用时有意义。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// src/renderer/renderer.cpp
+// Implements renderer base helpers for shared descriptors, debug drawing, background rendering, and resource accounting.
+// Derived renderers reuse these pieces so traversal and raster paths only own their specialized pipelines.
 //==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
 #include <algorithm>
 #include <random>
 #include <vector>
@@ -20,14 +15,9 @@
 #include "shaderio.h"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
 namespace lodclusters {
 
 
-// 函数：RenderScene::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 bool RenderScene::init(Resources* res, const Scene* scene_, const StreamingConfig& streamingConfig_, bool useStreaming_)
 {
   scene        = scene_;
@@ -45,9 +35,6 @@ bool RenderScene::init(Resources* res, const Scene* scene_, const StreamingConfi
 }
 
 
-// 函数：RenderScene::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void RenderScene::deinit()
 {
 
@@ -57,9 +44,6 @@ void RenderScene::deinit()
 }
 
 
-// 函数：RenderScene::streamingReset。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void RenderScene::streamingReset()
 {
   if(useStreaming)
@@ -70,9 +54,6 @@ void RenderScene::streamingReset()
 }
 
 
-// 函数：RenderScene::getShaderGeometriesBuffer。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 const nvvk::BufferTyped<shaderio::Geometry>& RenderScene::getShaderGeometriesBuffer() const
 {
 
@@ -83,9 +64,6 @@ const nvvk::BufferTyped<shaderio::Geometry>& RenderScene::getShaderGeometriesBuf
 }
 
 
-// 函数：RenderScene::getGeometrySize。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 size_t RenderScene::getGeometrySize(bool reserved) const
 {
   if(useStreaming)
@@ -95,9 +73,6 @@ size_t RenderScene::getGeometrySize(bool reserved) const
 }
 
 
-// 函数：RenderScene::getOperationsSize。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 size_t RenderScene::getOperationsSize() const
 {
   if(useStreaming)
@@ -107,9 +82,6 @@ size_t RenderScene::getOperationsSize() const
 }
 
 
-// 函数：Renderer::initBasicShaders。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 bool Renderer::initBasicShaders(Resources& res, RenderScene& rscene, const RendererConfig& config)
 {
   uint32_t maxPrimitiveOutputs = config.useEXTmeshShader ? res.m_meshShaderPropsEXT.maxMeshOutputPrimitives :
@@ -161,9 +133,6 @@ bool Renderer::initBasicShaders(Resources& res, RenderScene& rscene, const Rende
 }
 
 
-// 函数：Renderer::initBasics。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void Renderer::initBasics(Resources& res, RenderScene& rscene, const RendererConfig& config)
 {
 
@@ -217,9 +186,6 @@ void Renderer::initBasics(Resources& res, RenderScene& rscene, const RendererCon
 }
 
 
-// 函数：Renderer::deinitBasics。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
 void Renderer::deinitBasics(Resources& res)
 {
 
@@ -235,9 +201,6 @@ void Renderer::deinitBasics(Resources& res)
 }
 
 
-// 函数：Renderer::updateBasicDescriptors。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void Renderer::updateBasicDescriptors(Resources& res, RenderScene& rscene, const nvvk::Buffer* sceneBuildBuffer)
 {
   nvvk::WriteSetContainer writeSets;
@@ -257,9 +220,6 @@ void Renderer::updateBasicDescriptors(Resources& res, RenderScene& rscene, const
 }
 
 
-// 函数：Renderer::initBasicPipelines。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
 void Renderer::initBasicPipelines(Resources& res, RenderScene& rscene, const RendererConfig& config)
 {
   m_basicShaderFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_MESH_BIT_NV | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -320,9 +280,6 @@ void Renderer::initBasicPipelines(Resources& res, RenderScene& rscene, const Ren
 }
 
 
-// 函数：Renderer::renderInstanceBboxes。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void Renderer::renderInstanceBboxes(VkCommandBuffer cmd)
 {
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_basicPipelineLayout, 0, 1, m_basicDset.getSetPtr(), 0, nullptr);
@@ -346,9 +303,6 @@ void Renderer::renderInstanceBboxes(VkCommandBuffer cmd)
 }
 
 
-// 函数：Renderer::renderClusterBboxes。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
 void Renderer::renderClusterBboxes(VkCommandBuffer cmd, nvvk::Buffer sceneBuildBuffer)
 {
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_basicPipelineLayout, 0, 1, m_basicDset.getSetPtr(), 0, nullptr);
@@ -367,9 +321,7 @@ void Renderer::renderClusterBboxes(VkCommandBuffer cmd, nvvk::Buffer sceneBuildB
   }
 }
 
-// 函数：Renderer::writeBackgroundSky。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
+
 void Renderer::writeBackgroundSky(VkCommandBuffer cmd)
 {
   uint32_t dummy = 0;

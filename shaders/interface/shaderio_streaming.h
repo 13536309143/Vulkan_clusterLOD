@@ -1,3 +1,8 @@
+//==============================================================================
+// shaders/interface/shaderio_streaming.h
+// Streaming ABI shared between CPU task scheduling and GPU request/update passes.
+// Resident IDs, invalid-address sentinels, and patch records must remain stable across traversal, update, and render stages.
+//==============================================================================
 #ifndef _SHADERIO_STREAMING_H_
 #define _SHADERIO_STREAMING_H_
 
@@ -101,4 +106,4 @@ struct SceneStreaming
 }
 #endif
 
-#endif  // _SHADERIO_STREAMING_H_
+#endif

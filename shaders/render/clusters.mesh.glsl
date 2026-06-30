@@ -1,10 +1,7 @@
 //==============================================================================
-// 文件：shaders/render/clusters.mesh.glsl
-// 模块定位：渲染阶段着色器，把遍历输出的 簇 转换为 帧缓冲 中的颜色、深度和调试信息。
-// 数据流：读取 render 簇 list 和 组/簇 payload，输出硬件网格着色器 primitive 或计算软件光栅结果。
-// 方法说明：系统同时支持硬件网格着色器和软件光栅路径，用不同执行模型覆盖不同大小和密度的 簇。
-// 正确性约束：硬件与软件路径必须共享同一深度编码和材质解释；簇 payload 地址必须来自有效驻留数据。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// shaders/render/clusters.mesh.glsl
+// Mesh shader that expands visible cluster records into rasterized triangles.
+// It resolves group payload addresses, fetches compact local indices and attributes, and emits interpolation data for shading and picking.
 //==============================================================================
 #version 460
 #extension GL_GOOGLE_include_directive : enable
@@ -25,12 +22,9 @@
 #extension GL_EXT_control_flow_attributes : require
 
 
-// 依赖说明：引入共享布局、剔除、着色或阶段间复用的着色器片段。
-// 这些 include 共同决定本文件能访问的结构布局、数学辅助函数和编译期宏。
 #include "shaderio.h"
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
+
 layout(push_constant) uniform pushData
 {
   uint instanceID;
@@ -38,8 +32,6 @@ layout(push_constant) uniform pushData
 push;
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_FRAME_UBO, set = 0) uniform frameConstantsBuffer
 {
   FrameConstants view;
@@ -48,40 +40,30 @@ layout(scalar, binding = BINDINGS_FRAME_UBO, set = 0) uniform frameConstantsBuff
 #include "culling_mesh.inc"
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar,binding=BINDINGS_READBACK_SSBO,set=0) buffer readbackBuffer
 {
   Readback readback;
 };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_RENDERINSTANCES_SSBO, set = 0) buffer renderInstancesBuffer
 {
   RenderInstance instances[];
 };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_GEOMETRIES_SSBO, set = 0) buffer geometryBuffer
 {
   Geometry geometries[];
 };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_SCENEBUILDING_UBO, set = 0) uniform buildBuffer
 {
   SceneBuilding build;
 };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_SCENEBUILDING_SSBO, set = 0) buffer buildBufferRW
 {
   SceneBuilding buildRW;
@@ -90,16 +72,12 @@ layout(scalar, binding = BINDINGS_SCENEBUILDING_SSBO, set = 0) buffer buildBuffe
 #if USE_STREAMING
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_STREAMING_UBO, set = 0) uniform streamingBuffer
 {
   SceneStreaming streaming;
 };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_STREAMING_SSBO, set = 0) buffer streamingBufferRW
 {
   SceneStreaming streamingRW;
@@ -109,8 +87,6 @@ layout(scalar, binding = BINDINGS_STREAMING_SSBO, set = 0) buffer streamingBuffe
 #if !USE_DEPTH_ONLY
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(location = 0) out Interpolants
 {
   flat uint clusterID;
@@ -123,8 +99,6 @@ OUT[];
 #if ALLOW_SHADING && (ALLOW_VERTEX_NORMALS || ALLOW_VERTEX_TEXCOORDS)
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(location = 3) out Interpolants2
 {
   flat uint vertexID;
@@ -136,24 +110,16 @@ OUTBARY[];
 #ifndef MESHSHADER_WORKGROUP_SIZE
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define MESHSHADER_WORKGROUP_SIZE 32
 #endif
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(local_size_x = MESHSHADER_WORKGROUP_SIZE) in;
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(max_vertices = CLUSTER_VERTEX_COUNT, max_primitives = CLUSTER_TRIANGLE_COUNT) out;
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(triangles) out;
 
 const uint MESHLET_VERTEX_ITERATIONS = ((CLUSTER_VERTEX_COUNT + MESHSHADER_WORKGROUP_SIZE - 1) / MESHSHADER_WORKGROUP_SIZE);
@@ -162,8 +128,6 @@ const uint MESHLET_TRIANGLE_ITERATIONS = ((CLUSTER_TRIANGLE_COUNT + MESHSHADER_W
 #if USE_TWO_SIDED
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define CULLING_NO_HIZ
 #include "culling.glsl"
 #endif
@@ -173,9 +137,7 @@ shared vec4 s_vertices[CLUSTER_VERTEX_COUNT];
 #endif
 
 
-// 函数：main。作为本着色器阶段入口，按绑定资源执行当前 GPU 工作。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该入口位于控制流根部，调用顺序决定后续资源生命周期和数据依赖。
+// Emit one mesh-shader workgroup per visible cluster and fetch compact attributes from its resident payload.
 void main()
 {
 #if USE_EXT_MESH_SHADER

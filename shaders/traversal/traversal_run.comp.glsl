@@ -1,10 +1,7 @@
 //==============================================================================
-// 文件：shaders/traversal/traversal_run.comp.glsl
-// 模块定位：LOD 遍历着色器，负责从实例层次中选择本帧需要渲染或请求加载的 簇。
-// 数据流：读取实例、几何层次、Hi-Z 和 流式加载 地址，输出 traversal queue、组 queue、render 簇 list 和 request。
-// 方法说明：遍历阶段把屏幕空间误差、视锥剔除和遮挡剔除合并为并行剪枝问题，以减少后续光栅工作量。
-// 正确性约束：队列计数必须原子更新；流式加载 地址无效时只能发请求，不能解引用；two-阶段 状态必须区分上一帧和当前帧 Hi-Z。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// shaders/traversal/traversal_run.comp.glsl
+// Main clustered LOD traversal compute shader.
+// It walks instance and group hierarchy tasks, applies frustum/Hi-Z/LOD tests, emits visible clusters, and requests missing streamed groups.
 //==============================================================================
 #version 460
 
@@ -28,82 +25,54 @@
 #extension GL_KHR_memory_scope_semantics : require
 
 
-// 依赖说明：引入共享布局、剔除、着色或阶段间复用的着色器片段。
-// 这些 include 共同决定本文件能访问的结构布局、数学辅助函数和编译期宏。
 #include "shaderio.h"
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_FRAME_UBO, set = 0) uniform frameConstantsBuffer{FrameConstants view;};
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_READBACK_SSBO, set = 0) buffer readbackBuffer{Readback readback;};
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_RENDERINSTANCES_SSBO, set = 0) buffer renderInstancesBuffer{RenderInstance instances[];};
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_GEOMETRIES_SSBO, set = 0) buffer geometryBuffer{Geometry geometries[];};
 
 #if USE_TWO_PASS_CULLING && TARGETS_RASTERIZATION
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(binding = BINDINGS_HIZ_TEX)  uniform sampler2D texHizFar[2];
 #else
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(binding = BINDINGS_HIZ_TEX)  uniform sampler2D texHizFar;
 #endif
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_SCENEBUILDING_UBO, set = 0) uniform buildBuffer{SceneBuilding build; };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_SCENEBUILDING_SSBO, set = 0) coherent buffer buildBufferRW{volatile SceneBuilding buildRW;  };
 #if USE_STREAMING
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_STREAMING_UBO, set = 0) uniform streamingBuffer{SceneStreaming streaming;};
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_STREAMING_SSBO, set = 0) buffer streamingBufferRW{SceneStreaming streamingRW;};
 #endif
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(local_size_x=TRAVERSAL_RUN_WORKGROUP) in;
 #include "culling.glsl"
 #include "traversal.glsl"
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
 #define USE_ATOMIC_LOAD_STORE 1
 
 
-// 函数：setupTask。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
+// Decode one queued traversal task and resolve the instance/node/group it references.
 uint setupTask(inout TraversalInfo traversalInfo, uint readIndex, uint pass)
 {
   uint subCount = 0;
@@ -126,9 +95,6 @@ uint setupTask(inout TraversalInfo traversalInfo, uint readIndex, uint pass)
 #if USE_CULLING && (TARGETS_RASTERIZATION || USE_FORCED_INVISIBLE_CULLING)
 
 
-// 函数：queryWasVisible。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 bool queryWasVisible(mat4x3 instanceTransform, BBox bbox, bool isNode)
 {
   vec3 bboxMin = bbox.lo;
@@ -184,9 +150,7 @@ bool queryWasVisible(mat4x3 instanceTransform, BBox bbox, bool isNode)
 #endif
 
 
-// 函数：processSubTask。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// Expand one child node or group, producing render clusters, follow-up traversal tasks, or streaming requests.
 void processSubTask(const TraversalInfo subgroupTasks, uint taskID, uint taskSubID, bool isValid, uint threadReadIndex, uint pass)
 {
 
@@ -425,18 +389,12 @@ traversalMetric = Group_in(geometry.streamingGroupAddresses.d[clusterGeneratingG
 }
 
 
-// 结构：TaskInfo。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
 struct TaskInfo {
   uint taskID;
 };
 shared TaskInfo s_tasks[TRAVERSAL_RUN_WORKGROUP];
 
 
-// 函数：processAllSubTasks。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
 void processAllSubTasks(inout TraversalInfo traversalInfo, bool threadRunnable, int threadSubCount, uint threadReadIndex, uint pass)
 {
 
@@ -498,9 +456,7 @@ void processAllSubTasks(inout TraversalInfo traversalInfo, bool threadRunnable, 
 }
 
 
-// 函数：run。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// Process the current traversal queue pass; pass 1 consumes work generated by adaptive two-pass culling.
 void run()
 {
 
@@ -592,9 +548,6 @@ void run()
 }
 
 
-// 函数：main。作为本着色器阶段入口，按绑定资源执行当前 GPU 工作。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该入口位于控制流根部，调用顺序决定后续资源生命周期和数据依赖。
 void main()
 {
 

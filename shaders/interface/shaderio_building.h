@@ -1,3 +1,8 @@
+//==============================================================================
+// shaders/interface/shaderio_building.h
+// Per-frame scene-building ABI for traversal queues, cluster lists, visibility state, and indirect dispatch metadata.
+// Compute passes update these fields atomically before render shaders consume them in the same frame.
+//==============================================================================
 #ifndef _SHADERIO_BUILDING_H_
 #define _SHADERIO_BUILDING_H_
 
@@ -82,4 +87,4 @@ struct SceneBuilding
 }
 #endif
 
-#endif  // _SHADERIO_BUILDING_H_
+#endif

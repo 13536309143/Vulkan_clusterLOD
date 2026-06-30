@@ -1,10 +1,7 @@
 //==============================================================================
-// 文件：shaders/render/frag.glsl
-// 模块定位：渲染阶段着色器，把遍历输出的 簇 转换为 帧缓冲 中的颜色、深度和调试信息。
-// 数据流：读取 render 簇 list 和 组/簇 payload，输出硬件网格着色器 primitive 或计算软件光栅结果。
-// 方法说明：系统同时支持硬件网格着色器和软件光栅路径，用不同执行模型覆盖不同大小和密度的 簇。
-// 正确性约束：硬件与软件路径必须共享同一深度编码和材质解释；簇 payload 地址必须来自有效驻留数据。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
+// shaders/render/frag.glsl
+// Fragment shader for clustered LOD rendering.
+// It performs material/debug visualization, optional shading, wireframe overlay, and picking/readback encoding.
 //==============================================================================
 #version 460
 #extension GL_GOOGLE_include_directive : enable
@@ -23,52 +20,34 @@
 #endif
 
 
-// 依赖说明：引入共享布局、剔除、着色或阶段间复用的着色器片段。
-// 这些 include 共同决定本文件能访问的结构布局、数学辅助函数和编译期宏。
 #include "shaderio.h"
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(push_constant) uniform pushData {
   uint instanceID;
 } push;
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_FRAME_UBO, set = 0) uniform frameConstantsBuffer { FrameConstants view; };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_READBACK_SSBO, set = 0) buffer readbackBuffer { Readback readback; };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_RENDERINSTANCES_SSBO, set = 0) buffer renderInstancesBuffer { RenderInstance instances[]; };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_GEOMETRIES_SSBO, set = 0) buffer geometryBuffer { Geometry geometries[]; };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_SCENEBUILDING_UBO, set = 0) uniform buildBuffer { SceneBuilding build; };
 
 #if USE_STREAMING
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_STREAMING_UBO, set = 0) uniform streamingBuffer { SceneStreaming streaming; };
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(scalar, binding = BINDINGS_STREAMING_SSBO, set = 0) buffer streamingBufferRW { SceneStreaming streamingRW; };
 #endif
 
@@ -76,8 +55,6 @@ layout(scalar, binding = BINDINGS_STREAMING_SSBO, set = 0) buffer streamingBuffe
 #include "render_shading.glsl"
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(location = 0) in Interpolants {
   flat uint clusterID;
   flat uint instanceID;
@@ -89,26 +66,18 @@ layout(location = 0) in Interpolants {
 #if ALLOW_SHADING && (ALLOW_VERTEX_NORMALS || ALLOW_VERTEX_TEXCOORDS)
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(location = 3) pervertexEXT in Interpolants2 {
   uint vertexID;
 } INBARY[];
 #endif
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
+
 layout(location = 0, index = 0) out vec4 out_Color;
 
 
-// 绑定布局说明：声明本阶段访问的描述符、推送常量、输入输出或工作组配置。
-// 这些声明构成 Vulkan pipeline layout 与 GLSL 代码之间的显式契约。
 layout(early_fragment_tests) in;
 
 
-// 函数：main。作为本着色器阶段入口，按绑定资源执行当前 GPU 工作。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该入口位于控制流根部，调用顺序决定后续资源生命周期和数据依赖。
 void main()
 {
 
