@@ -57,6 +57,96 @@ P10_POLICY_TABLE = {
     10: ("P10_critical_preserve", 1.00, 0.80, 0.55, False, 1.65),
 }
 
+ROLE_PROTOTYPES = {
+    "micro_uncertain": {
+        "priority": 1,
+        "function_role": "low_confidence_or_micro_detail",
+        "strategy": "micro_uncertain_cull_far",
+        "protected_features": ["placement", "coarse_silhouette"],
+        "expected_features": {"micro_score": 0.90, "uncertainty_score": 0.75, "detail_score": 0.15},
+    },
+    "repeated_fastener": {
+        "priority": 2,
+        "function_role": "fastening_or_repeated_standard_part",
+        "strategy": "repeated_fastener_aggressive",
+        "protected_features": ["placement", "head_silhouette", "axis_if_visible"],
+        "expected_features": {"micro_score": 0.45, "slender_score": 0.45, "ring_disk_score": 0.45, "detail_score": 0.35},
+    },
+    "large_static_bulk": {
+        "priority": 3,
+        "function_role": "large_static_support_or_cover",
+        "strategy": "large_static_bulk_fast_simplify",
+        "protected_features": ["outer_silhouette", "major_openings"],
+        "expected_features": {"bulk_score": 0.90, "size_score": 0.85, "detail_score": 0.25},
+    },
+    "ordinary_low_detail": {
+        "priority": 4,
+        "function_role": "ordinary_low_detail_part",
+        "strategy": "ordinary_low_detail_fast_simplify",
+        "protected_features": ["coarse_silhouette"],
+        "expected_features": {"simple_score": 0.80, "detail_score": 0.25, "uncertainty_score": 0.25},
+    },
+    "balanced_visible": {
+        "priority": 5,
+        "function_role": "balanced_visible_structure",
+        "strategy": "balanced_visible_part",
+        "protected_features": ["silhouette", "visible_feature_edges"],
+        "expected_features": {"medium_size_score": 0.70, "detail_score": 0.50, "simple_score": 0.45},
+    },
+    "high_detail_shape": {
+        "priority": 6,
+        "function_role": "high_detail_visible_shape",
+        "strategy": "high_detail_shape",
+        "protected_features": ["silhouette", "high_curvature_regions", "feature_edges"],
+        "expected_features": {"high_detail_score": 0.90, "density_score": 0.75, "plate_score": 0.10},
+    },
+    "interface_fluid": {
+        "priority": 7,
+        "function_role": "interface_or_fluid_connection",
+        "strategy": "interface_or_fluid_connection",
+        "protected_features": ["interface_boundary", "port_silhouette", "mounting_surfaces"],
+        "expected_features": {"compact_score": 0.70, "ring_disk_score": 0.55, "detail_score": 0.55},
+    },
+    "structural_control": {
+        "priority": 8,
+        "function_role": "structural_connector_or_control_surface",
+        "strategy": "structural_control_protect",
+        "protected_features": ["mounting_boundaries", "contact_surfaces", "control_silhouette"],
+        "expected_features": {"plate_score": 0.55, "compact_score": 0.55, "detail_score": 0.55, "size_score": 0.55},
+    },
+    "motion_precision": {
+        "priority": 9,
+        "function_role": "motion_or_precision_guidance",
+        "strategy": "motion_precision_protect",
+        "protected_features": ["axis", "guide_surfaces", "contact_surfaces", "silhouette"],
+        "expected_features": {"slender_score": 0.65, "ring_disk_score": 0.55, "compact_score": 0.50, "detail_score": 0.65},
+    },
+    "critical_preserve": {
+        "priority": 10,
+        "function_role": "critical_motion_or_transmission_part",
+        "strategy": "critical_preserve",
+        "protected_features": ["periodic_profile", "center_axis", "contact_surfaces", "silhouette"],
+        "expected_features": {"high_detail_score": 0.80, "ring_disk_score": 0.65, "density_score": 0.70, "compact_score": 0.55},
+    },
+}
+
+CLASS_ROLE_PRIORS = {
+    "screws_bolts_studs": {"repeated_fastener": 0.95, "motion_precision": 0.15},
+    "nuts": {"repeated_fastener": 0.90, "interface_fluid": 0.20},
+    "washers_rings_spacers": {"repeated_fastener": 0.75, "interface_fluid": 0.35, "large_static_bulk": 0.10},
+    "pins_rivets_keys": {"repeated_fastener": 0.70, "motion_precision": 0.35},
+    "bearings_bushings_guides": {"critical_preserve": 0.85, "motion_precision": 0.75},
+    "gears_pulleys_chains": {"critical_preserve": 0.95, "motion_precision": 0.70},
+    "motors_gearmotors": {"critical_preserve": 0.90, "motion_precision": 0.45},
+    "wheels_castors": {"motion_precision": 0.80, "critical_preserve": 0.45},
+    "rotating_fluid_machinery": {"critical_preserve": 0.75, "interface_fluid": 0.45},
+    "springs": {"critical_preserve": 0.85, "motion_precision": 0.55},
+    "pipe_fittings_valves_nozzles": {"interface_fluid": 0.95, "critical_preserve": 0.25},
+    "joints_clamps_structural_connectors": {"structural_control": 0.80, "interface_fluid": 0.55},
+    "plates_discs_shapes": {"large_static_bulk": 0.55, "ordinary_low_detail": 0.45, "balanced_visible": 0.35},
+    "handles_controls": {"structural_control": 0.70, "high_detail_shape": 0.45, "balanced_visible": 0.35},
+}
+
 
 def make_p10_policy(priority: int, strategy: str) -> dict:
     name, near, mid, far, allow_cull, screen_error_weight = P10_POLICY_TABLE[priority]
@@ -69,6 +159,17 @@ def make_p10_policy(priority: int, strategy: str) -> dict:
         "allow_cull": allow_cull,
         "screen_error_weight": screen_error_weight,
     }
+
+
+def clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def smoothstep(edge0: float, edge1: float, value: float) -> float:
+    if edge0 == edge1:
+        return 1.0 if value >= edge1 else 0.0
+    t = clamp01((value - edge0) / (edge1 - edge0))
+    return t * t * (3.0 - 2.0 * t)
 
 
 def parse_args() -> argparse.Namespace:
@@ -246,315 +347,224 @@ def confidence_state(row: dict, high: float, low: float, margin_threshold: float
     return "C1_medium", True, margin
 
 
-def lod_policy(
+def structural_feature_vector(
     row: dict,
     size_rank: int,
     detail_rank: int,
     reliable: bool,
-    semantic: str,
+    margin: float,
     fallback: str,
-) -> dict:
+) -> dict[str, float]:
+    diag = to_float(row, "bbox_diagonal")
+    long_side = to_float(row, "obb_size_long")
+    mid_side = to_float(row, "obb_size_mid")
+    short_side = to_float(row, "obb_size_short")
+    elongation = to_float(row, "elongation")
+    flatness = to_float(row, "flatness")
+    compactness = to_float(row, "compactness")
+    face_count = max(0, to_int(row, "face_count"))
+    area = max(0.0, to_float(row, "surface_area"))
     shape = row.get("shape_hint", "")
-    predicted_class = row.get("predicted_class", "")
 
-    is_micro = size_rank <= 1
-    is_small = size_rank <= 2
-    is_large = size_rank >= 4
-    is_xlarge = size_rank >= 5
-    is_huge = size_rank >= 6
-    is_thin_or_plate = shape == "flat_plate" or fallback in {"geom_ultra_thin_sheet", "geom_thin_plate"}
-    is_simple_bulk_shape = fallback in {
-        "geom_ultra_thin_sheet",
-        "geom_thin_plate",
-        "geom_compact_block",
-        "geom_simple_irregular",
-    }
-    is_bulk_static = (
-        semantic in {"bulk_static_part", "other_part", "semantic_uncertain"}
-        and is_xlarge
-        and (is_simple_bulk_shape or is_thin_or_plate or is_huge)
+    aspect_xy = abs(long_side - mid_side) / max(long_side, 1e-9)
+    thickness_ratio = short_side / max(long_side, 1e-9)
+    area_density = area / max(diag * diag, 1e-12)
+    face_density = face_count / max(diag * diag, 1e-12)
+    density_score = clamp01((math.log10(max(face_density, 1.0)) - 2.0) / 4.0)
+
+    plate_score = max(
+        0.90 if shape == "flat_plate" else 0.0,
+        0.85 if fallback in {"geom_ultra_thin_sheet", "geom_thin_plate"} else 0.0,
+        clamp01((0.16 - flatness) / 0.16),
+        clamp01((0.08 - thickness_ratio) / 0.08),
     )
-    is_motion_key = semantic == "motion_or_precision_part" and reliable
-    is_structural_key = semantic == "structural_key_part" and reliable
-    is_control_key = semantic == "control_or_handle" and reliable
-    is_interface_key = semantic == "fluid_or_interface_part" and reliable
-    is_fastener = semantic == "fastener_repeated"
+    slender_score = max(
+        0.90 if shape == "long_slender" else 0.0,
+        0.85 if fallback in {"geom_wire_or_rod", "geom_slender_bar"} else 0.0,
+        smoothstep(2.6, 8.0, elongation),
+    )
+    compact_score = max(
+        0.85 if shape == "compact_block" else 0.0,
+        0.70 if fallback in {"geom_compact_block", "geom_simple_irregular"} else 0.0,
+        smoothstep(0.05, 0.18, compactness),
+    )
+    ring_disk_score = max(
+        0.75 if fallback == "geom_round_or_cubic" and plate_score > 0.25 else 0.0,
+        clamp01((0.22 - aspect_xy) / 0.22) * clamp01((0.45 - flatness) / 0.45),
+    )
+    simple_score = clamp01(1.0 - (detail_rank / 4.0) * 0.85)
+    high_detail_score = max(smoothstep(2.0, 4.0, detail_rank), density_score)
+    size_score = clamp01(size_rank / 6.0)
+    micro_score = clamp01((2.0 - size_rank) / 2.0)
+    medium_size_score = clamp01(1.0 - abs(size_rank - 3.0) / 3.0)
+    bulk_score = max(
+        0.0,
+        smoothstep(4.0, 6.0, size_rank) * max(plate_score, compact_score, simple_score),
+        smoothstep(5.0, 6.0, size_rank) * clamp01(area_density / 12.0),
+    )
+    uncertainty_score = 1.0 - clamp01(margin / 0.30)
+    if reliable:
+        uncertainty_score *= 0.45
 
-    # Oversized static masses such as buildings, foundations, covers, walls and slabs
-    # should become cheap quickly. Size alone must not imply preservation.
-    if is_bulk_static:
-        if detail_rank >= 4 and not is_thin_or_plate:
-            return {
-                "lod_priority": "P3_standard",
-                "lod_strategy": "large_static_bulk_balanced",
-                "target_ratio_near": 0.62,
-                "target_ratio_mid": 0.34,
-                "target_ratio_far": 0.14,
-                "allow_cull": False,
-                "screen_error_weight": 0.90,
-            }
-        return {
-            "lod_priority": "P2_aggressive",
-            "lod_strategy": "large_static_bulk_fast_simplify",
-            "target_ratio_near": 0.45,
-            "target_ratio_mid": 0.20,
-            "target_ratio_far": 0.06,
-            "allow_cull": True,
-            "screen_error_weight": 0.65,
-        }
-
-    # Repeated fasteners are usually numerous and should collapse quickly unless
-    # they are the only visible source of shape complexity.
-    if is_fastener:
-        if is_micro or not reliable:
-            return {
-                "lod_priority": "P1_micro_or_uncertain",
-                "lod_strategy": "fastener_micro_cull_far",
-                "target_ratio_near": 0.30,
-                "target_ratio_mid": 0.10,
-                "target_ratio_far": 0.02,
-                "allow_cull": True,
-                "screen_error_weight": 0.45,
-            }
-        return {
-            "lod_priority": "P2_aggressive",
-            "lod_strategy": "fastener_repeated_aggressive",
-            "target_ratio_near": 0.45,
-            "target_ratio_mid": 0.20,
-            "target_ratio_far": 0.06,
-            "allow_cull": True,
-            "screen_error_weight": 0.65,
-        }
-
-    # Preserve parts whose function depends on visible mechanical motion,
-    # precision alignment, or contact surfaces.
-    if is_motion_key:
-        if predicted_class in {"gears_pulleys_chains", "motors_gearmotors", "bearings_bushings_guides", "springs"} or detail_rank >= 2 or is_large:
-            return {
-                "lod_priority": "P5_preserve",
-                "lod_strategy": "preserve_motion_or_precision_key",
-                "target_ratio_near": 1.00,
-                "target_ratio_mid": 0.75,
-                "target_ratio_far": 0.45,
-                "allow_cull": False,
-                "screen_error_weight": 1.50,
-            }
-        return {
-            "lod_priority": "P4_conservative",
-            "lod_strategy": "protect_motion_part",
-            "target_ratio_near": 0.85,
-            "target_ratio_mid": 0.55,
-            "target_ratio_far": 0.30,
-            "allow_cull": False,
-            "screen_error_weight": 1.20,
-        }
-
-    # Structural connectors are key when they are joints, clamps or brackets.
-    # Plain large plates remain bulk static and are handled above.
-    if is_structural_key:
-        if detail_rank >= 3 or fallback in {"geom_wire_or_rod", "geom_slender_bar", "geom_high_detail_irregular"}:
-            return {
-                "lod_priority": "P5_preserve",
-                "lod_strategy": "preserve_structural_connector_key",
-                "target_ratio_near": 0.95,
-                "target_ratio_mid": 0.68,
-                "target_ratio_far": 0.40,
-                "allow_cull": False,
-                "screen_error_weight": 1.40,
-            }
-        return {
-            "lod_priority": "P4_conservative",
-            "lod_strategy": "protect_structural_connector",
-            "target_ratio_near": 0.80,
-            "target_ratio_mid": 0.50,
-            "target_ratio_far": 0.26,
-            "allow_cull": False,
-            "screen_error_weight": 1.15,
-        }
-
-    if is_control_key:
-        if is_large or detail_rank >= 3:
-            return {
-                "lod_priority": "P4_conservative",
-                "lod_strategy": "protect_control_surface",
-                "target_ratio_near": 0.80,
-                "target_ratio_mid": 0.50,
-                "target_ratio_far": 0.26,
-                "allow_cull": False,
-                "screen_error_weight": 1.15,
-            }
-        return {
-            "lod_priority": "P3_standard",
-            "lod_strategy": "control_surface_balanced",
-            "target_ratio_near": 0.65,
-            "target_ratio_mid": 0.36,
-            "target_ratio_far": 0.16,
-            "allow_cull": False,
-            "screen_error_weight": 0.95,
-        }
-
-    if is_interface_key:
-        if detail_rank >= 3 or is_large:
-            return {
-                "lod_priority": "P4_conservative",
-                "lod_strategy": "protect_interface_part",
-                "target_ratio_near": 0.80,
-                "target_ratio_mid": 0.50,
-                "target_ratio_far": 0.26,
-                "allow_cull": False,
-                "screen_error_weight": 1.15,
-            }
-        return {
-            "lod_priority": "P3_standard",
-            "lod_strategy": "interface_part_balanced",
-            "target_ratio_near": 0.65,
-            "target_ratio_mid": 0.36,
-            "target_ratio_far": 0.16,
-            "allow_cull": False,
-            "screen_error_weight": 0.95,
-        }
-
-    if not reliable:
-        if is_small or is_thin_or_plate:
-            return {
-                "lod_priority": "P1_micro_or_uncertain",
-                "lod_strategy": "uncertain_small_or_sheet_cull_far",
-                "target_ratio_near": 0.30,
-                "target_ratio_mid": 0.10,
-                "target_ratio_far": 0.02,
-                "allow_cull": True,
-                "screen_error_weight": 0.45,
-            }
-        if is_xlarge:
-            return {
-                "lod_priority": "P2_aggressive",
-                "lod_strategy": "uncertain_large_fast_simplify",
-                "target_ratio_near": 0.45,
-                "target_ratio_mid": 0.20,
-                "target_ratio_far": 0.06,
-                "allow_cull": True,
-                "screen_error_weight": 0.65,
-            }
-
-    if detail_rank >= 4 and not is_thin_or_plate:
-        return {
-            "lod_priority": "P4_conservative",
-            "lod_strategy": "protect_high_detail_shape",
-            "target_ratio_near": 0.80,
-            "target_ratio_mid": 0.50,
-            "target_ratio_far": 0.26,
-            "allow_cull": False,
-            "screen_error_weight": 1.15,
-        }
-    if detail_rank >= 2 and not is_micro:
-        return {
-            "lod_priority": "P3_standard",
-            "lod_strategy": "balanced_visible_part",
-            "target_ratio_near": 0.65,
-            "target_ratio_mid": 0.36,
-            "target_ratio_far": 0.16,
-            "allow_cull": False,
-            "screen_error_weight": 0.95,
-        }
-    if size_rank >= 2:
-        return {
-            "lod_priority": "P2_aggressive",
-            "lod_strategy": "ordinary_part_fast_simplify",
-            "target_ratio_near": 0.45,
-            "target_ratio_mid": 0.20,
-            "target_ratio_far": 0.06,
-            "allow_cull": True,
-            "screen_error_weight": 0.65,
-        }
     return {
-        "lod_priority": "P1_micro_or_uncertain",
-        "lod_strategy": "micro_or_trivial_cull_far",
-        "target_ratio_near": 0.30,
-        "target_ratio_mid": 0.10,
-        "target_ratio_far": 0.02,
-        "allow_cull": True,
-        "screen_error_weight": 0.45,
+        "micro_score": micro_score,
+        "size_score": size_score,
+        "medium_size_score": medium_size_score,
+        "detail_score": clamp01(detail_rank / 4.0),
+        "high_detail_score": high_detail_score,
+        "density_score": density_score,
+        "slender_score": slender_score,
+        "plate_score": plate_score,
+        "compact_score": compact_score,
+        "ring_disk_score": ring_disk_score,
+        "bulk_score": bulk_score,
+        "simple_score": simple_score,
+        "uncertainty_score": uncertainty_score,
     }
 
 
-def refine_to_p10_policy(
+def prototype_match_score(features: dict[str, float], role: str) -> float:
+    expected = ROLE_PROTOTYPES[role]["expected_features"]
+    score_sum = 0.0
+    weight_sum = 0.0
+    for name, target in expected.items():
+        actual = features.get(name, 0.0)
+        weight = 0.75 + target
+        score_sum += max(0.0, 1.0 - abs(actual - target)) * weight
+        weight_sum += weight
+    return clamp01(score_sum / max(weight_sum, 1e-9))
+
+
+def semantic_role_scores(predicted_class: str, confidence: float, margin: float, reliable: bool) -> dict[str, float]:
+    priors = CLASS_ROLE_PRIORS.get(predicted_class, {})
+    evidence_quality = clamp01(confidence) * (0.70 + 0.30 * clamp01(margin / 0.30))
+    if not reliable:
+        evidence_quality *= 0.55
+    return {role: clamp01(prior * evidence_quality) for role, prior in priors.items()}
+
+
+def best_role(scores: dict[str, float]) -> tuple[str, float]:
+    if not scores:
+        return "ordinary_low_detail", 0.0
+    return max(scores.items(), key=lambda item: (item[1], ROLE_PROTOTYPES[item[0]]["priority"]))
+
+
+def inference_reasons(
+    role: str,
+    features: dict[str, float],
+    neural_role: str,
+    neural_score: float,
+    structural_role: str,
+    structural_score: float,
+    semantic: str,
+    reliable: bool,
+) -> list[str]:
+    reasons = []
+    if neural_score >= 0.35:
+        reasons.append(f"pointnext_prior={neural_role}:{neural_score:.2f}")
+    if structural_score >= 0.55:
+        reasons.append(f"structural_match={structural_role}:{structural_score:.2f}")
+    if not reliable:
+        reasons.append("low_or_ambiguous_pointnext_confidence")
+    if features["bulk_score"] >= 0.65:
+        reasons.append("large_static_bulk_evidence")
+    if features["micro_score"] >= 0.55:
+        reasons.append("micro_part")
+    if features["slender_score"] >= 0.65:
+        reasons.append("slender_axis_shape")
+    if features["plate_score"] >= 0.65:
+        reasons.append("thin_plate_or_sheet_shape")
+    if features["ring_disk_score"] >= 0.65:
+        reasons.append("round_disk_or_ring_like_shape")
+    if features["high_detail_score"] >= 0.65:
+        reasons.append("high_mesh_detail")
+    if not reasons:
+        reasons.append(f"semantic_group={semantic}")
+    if role in {"critical_preserve", "motion_precision"}:
+        reasons.append("functional_contact_or_motion_preservation")
+    return reasons
+
+
+def infer_structural_semantics(
     row: dict,
     size_rank: int,
     detail_rank: int,
     reliable: bool,
     semantic: str,
     fallback: str,
-    base_policy: dict,
+    margin: float,
 ) -> dict:
-    shape = row.get("shape_hint", "")
     predicted_class = row.get("predicted_class", "")
+    confidence = to_float(row, "confidence")
+    features = structural_feature_vector(row, size_rank, detail_rank, reliable, margin, fallback)
+    structural_scores = {role: prototype_match_score(features, role) for role in ROLE_PROTOTYPES}
+    neural_scores = semantic_role_scores(predicted_class, confidence, margin, reliable)
 
-    is_micro = size_rank <= 1
-    is_small = size_rank <= 2
-    is_large = size_rank >= 4
-    is_xlarge = size_rank >= 5
-    is_huge = size_rank >= 6
-    is_thin_or_plate = shape == "flat_plate" or fallback in {"geom_ultra_thin_sheet", "geom_thin_plate"}
-    is_simple_bulk_shape = fallback in {
-        "geom_ultra_thin_sheet",
-        "geom_thin_plate",
-        "geom_compact_block",
-        "geom_simple_irregular",
-    }
-    is_bulk_static = (
-        semantic in {"bulk_static_part", "other_part", "semantic_uncertain"}
-        and is_xlarge
-        and (is_simple_bulk_shape or is_thin_or_plate or is_huge)
-    )
-    is_fastener = semantic == "fastener_repeated"
-    is_motion_key = semantic == "motion_or_precision_part" and reliable
-    is_structural_key = semantic == "structural_key_part" and reliable
-    is_control_key = semantic == "control_or_handle" and reliable
-    is_interface_key = semantic == "fluid_or_interface_part" and reliable
-
-    if is_fastener:
-        if is_micro or not reliable:
-            return make_p10_policy(1, "micro_or_uncertain_fastener_cull_far")
-        return make_p10_policy(2, "repeated_fastener_aggressive")
-
-    if is_bulk_static:
-        if detail_rank >= 4 and not is_thin_or_plate:
-            return make_p10_policy(4, "large_static_high_detail_low_detail_constraint")
-        return make_p10_policy(3, "large_static_bulk_fast_simplify")
-
-    if is_motion_key:
-        if predicted_class in {"gears_pulleys_chains", "motors_gearmotors", "bearings_bushings_guides", "springs"} or detail_rank >= 3:
-            return make_p10_policy(10, "critical_motion_or_precision_preserve")
-        return make_p10_policy(9, "motion_precision_protect")
-
-    if is_structural_key:
-        if detail_rank >= 3 or fallback in {"geom_wire_or_rod", "geom_slender_bar", "geom_high_detail_irregular"}:
-            return make_p10_policy(8, "structural_connector_key")
-        return make_p10_policy(7, "structural_interface_connector")
-
-    if is_interface_key:
-        return make_p10_policy(7, "fluid_or_mounting_interface")
-
-    if is_control_key:
-        if is_large or detail_rank >= 3:
-            return make_p10_policy(8, "structural_control_surface")
-        return make_p10_policy(6, "visible_control_shape")
-
+    neural_weight = clamp01(0.18 + 0.58 * confidence + 0.14 * clamp01(margin / 0.30))
     if not reliable:
-        if is_small or is_thin_or_plate:
-            return make_p10_policy(1, "uncertain_micro_or_sheet")
-        if is_xlarge:
-            return make_p10_policy(3, "uncertain_large_static_fast_simplify")
-        return make_p10_policy(4, "uncertain_ordinary_low_detail")
+        neural_weight *= 0.55
+    structural_weight = 1.0 - neural_weight
 
-    if detail_rank >= 4 and not is_thin_or_plate:
-        return make_p10_policy(6, "high_detail_shape")
-    if detail_rank >= 2 and not is_micro:
-        return make_p10_policy(5, "balanced_visible_part")
-    if size_rank >= 2:
-        return make_p10_policy(4, "ordinary_low_detail_fast_simplify")
+    fused_scores = {}
+    for role in ROLE_PROTOTYPES:
+        fused_scores[role] = (
+            neural_weight * neural_scores.get(role, 0.0)
+            + structural_weight * structural_scores.get(role, 0.0)
+        )
 
-    return make_p10_policy(1, "micro_or_trivial_cull_far")
+    if features["bulk_score"] >= 0.70 and semantic in {"bulk_static_part", "other_part", "semantic_uncertain"}:
+        fused_scores["large_static_bulk"] += 0.18
+    if features["micro_score"] >= 0.55 and (not reliable or semantic == "fastener_repeated"):
+        fused_scores["micro_uncertain"] += 0.22
+    if semantic == "fastener_repeated" and reliable and features["micro_score"] < 0.55:
+        fused_scores["repeated_fastener"] += 0.16
+    if semantic == "motion_or_precision_part" and reliable:
+        target_role = "critical_preserve" if predicted_class in {
+            "bearings_bushings_guides",
+            "gears_pulleys_chains",
+            "motors_gearmotors",
+            "springs",
+            "rotating_fluid_parts",
+        } else "motion_precision"
+        fused_scores[target_role] += 0.20
+    if semantic == "fluid_or_interface_part" and reliable:
+        fused_scores["interface_fluid"] += 0.18
+    if semantic == "structural_key_part" and reliable:
+        fused_scores["structural_control"] += 0.16
+    if features["high_detail_score"] >= 0.78 and features["bulk_score"] < 0.55:
+        fused_scores["high_detail_shape"] += 0.12
+
+    role, fused_score = best_role({key: clamp01(value) for key, value in fused_scores.items()})
+    structural_role, structural_score = best_role(structural_scores)
+    neural_role, neural_score = best_role(neural_scores)
+
+    prototype = ROLE_PROTOTYPES[role]
+    policy = make_p10_policy(prototype["priority"], prototype["strategy"])
+    reasons = inference_reasons(
+        role,
+        features,
+        neural_role,
+        neural_score,
+        structural_role,
+        structural_score,
+        semantic,
+        reliable,
+    )
+    rounded_features = {key: round(value, 4) for key, value in features.items()}
+
+    return {
+        "policy": policy,
+        "inferred_role": role,
+        "function_role": prototype["function_role"],
+        "semantic_structural_score": round(fused_score, 4),
+        "neural_role": neural_role,
+        "neural_role_score": round(neural_score, 4),
+        "structural_match_role": structural_role,
+        "structural_match_score": round(structural_score, 4),
+        "protected_features": json.dumps(prototype["protected_features"], ensure_ascii=False),
+        "inference_reason": ";".join(reasons),
+        "structural_features": json.dumps(rounded_features, ensure_ascii=False),
+    }
 
 
 def classify_row(row: dict, thresholds: dict, args: argparse.Namespace) -> dict:
@@ -565,8 +575,8 @@ def classify_row(row: dict, thresholds: dict, args: argparse.Namespace) -> dict:
     semantic = semantic_group(row.get("predicted_class", ""), reliable)
     fallback = geometry_fallback(row)
     detail_class, detail_rank = detail_level(row, thresholds)
-    base_policy = lod_policy(row, size_rank, detail_rank, reliable, semantic, fallback)
-    policy = refine_to_p10_policy(row, size_rank, detail_rank, reliable, semantic, fallback, base_policy)
+    inference = infer_structural_semantics(row, size_rank, detail_rank, reliable, semantic, fallback, margin)
+    policy = inference.pop("policy")
 
     small_low_conf_refined = size_rank <= 2 and not reliable
     if small_low_conf_refined:
@@ -581,6 +591,7 @@ def classify_row(row: dict, thresholds: dict, args: argparse.Namespace) -> dict:
         "semantic_group": semantic,
         "geometry_fallback_class": fallback,
         "small_low_conf_refined": small_low_conf_refined,
+        **inference,
         **policy,
     }
 
@@ -594,6 +605,10 @@ def summarize(rows: list[dict], thresholds: dict) -> dict:
         "confidence_class_counts": Counter(row["confidence_class"] for row in rows),
         "semantic_group_counts": Counter(row["semantic_group"] for row in rows),
         "geometry_fallback_counts": Counter(row["geometry_fallback_class"] for row in rows),
+        "inferred_role_counts": Counter(row["inferred_role"] for row in rows),
+        "function_role_counts": Counter(row["function_role"] for row in rows),
+        "neural_role_counts": Counter(row["neural_role"] for row in rows),
+        "structural_match_role_counts": Counter(row["structural_match_role"] for row in rows),
         "lod_priority_counts": Counter(row["lod_priority"] for row in rows),
         "lod_strategy_counts": Counter(row["lod_strategy"] for row in rows),
         "predicted_class_counts": Counter(row["predicted_class"] for row in rows),

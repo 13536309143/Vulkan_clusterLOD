@@ -116,6 +116,7 @@ void Scene::ProcessingInfo::logBegin(uint64_t totalTriangleCount)
   progressTrianglesCompleted  = 0;
   progressGeometriesCompleted = 0;
   progressLastPercentage      = 0;
+  cacheMismatchLogged.store(false, std::memory_order_relaxed);
 }
 
 

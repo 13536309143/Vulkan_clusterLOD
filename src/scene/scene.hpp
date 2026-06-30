@@ -870,6 +870,7 @@ struct ProcessingInfo
     uint32_t   progressGeometriesCompleted = 0;
     uint64_t   progressTrianglesCompleted  = 0;
     std::mutex progressMutex;
+    std::atomic_bool cacheMismatchLogged = false;
 
     nvutils::PerformanceTimer clock;
     double                    startTime = 0;

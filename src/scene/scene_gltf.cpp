@@ -1277,7 +1277,14 @@ void Scene::loadGeometryGLTF(ProcessingInfo& processingInfo, uint64_t geometryIn
   if(m_cacheFileView.isValid() && !isCached)
   {
 
-    LOGW("geometry mismatches scene cache file\n");
+    bool alreadyLogged = processingInfo.cacheMismatchLogged.exchange(true, std::memory_order_relaxed);
+    if(!alreadyLogged)
+    {
+      LOGW("scene cache is stale for current geometry or semantic LOD policy; rebuilding cache "
+           "(first mismatch: geometry %llu, mesh %zu)\n",
+           static_cast<unsigned long long>(geometryIndex),
+           meshIndex);
+    }
     return;
   }
   uint64_t quantCacheStart = 0;
