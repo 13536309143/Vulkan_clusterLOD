@@ -121,8 +121,6 @@ void main()
   uint geometryID = instance.geometryID;
   Geometry geometry = geometries[geometryID];
 
-  uint blasBuildIndex = BLAS_BUILD_INDEX_LOWDETAIL;
-
   vec4 clipMin;
   vec4 clipMax;
   bool clipValid;

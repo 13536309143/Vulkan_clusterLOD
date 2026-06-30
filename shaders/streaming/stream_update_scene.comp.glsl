@@ -129,7 +129,6 @@ void main()
       streaming.resident.activeGroups.d[streaming.update.loadActiveGroupsOffset + loadGroupIndex] = groupResidentID;
 
 
-      uint newBuildOffset = spatch.clasBuildOffset;
       for (uint c = 0; c < spatch.clusterCount; c++)
       {
         uint clusterResidentID = spatch.clusterResidentID + c;

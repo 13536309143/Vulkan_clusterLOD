@@ -246,7 +246,6 @@ streaming：
 
 - `--streaming`：启用 streaming。
 - `--maxtransfermegabytes`：每帧 transfer buffer 预算。
-- `--maxblascachingmegabytes`：BLAS cache 预算。
 - `--maxgeomegabytes`：几何数据预算。
 - `--maxresidentgroups`：最大驻留 group 数。
 - `--maxframeloadrequests`：每帧最大加载请求数。

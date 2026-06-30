@@ -1,32 +1,22 @@
 //==============================================================================
-// 文件：shaders/interface/shaderio_scene.h
-// 模块定位：CPU 与 GPU 共享布局文件，定义着色器和 C++ 共同理解的数据结构、常量和访问约定。
-// 数据流：CPU 侧填充这些结构，GPU 侧按完全相同的内存布局读取和写回。
-// 方法说明：共享布局是异构系统的 ABI，任何字段顺序、对齐和位域变化都会影响两侧解释一致性。
-// 正确性约束：结构对齐、标量布局和 缓冲 reference 类型必须与 Vulkan/GLSL 编译选项一致。
-// 注释风格：使用中文解释 GPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
-//==============================================================================
-// 依赖说明：引入共享布局、剔除、着色或阶段间复用的着色器片段。
-// 这些 include 共同决定本文件能访问的结构布局、数学辅助函数和编译期宏。
+// 鏂囦欢锛歴haders/interface/shaderio_scene.h
+// 妯″潡瀹氫綅锛欳PU 涓?GPU 鍏变韩甯冨眬鏂囦欢锛屽畾涔夌潃鑹插櫒鍜?C++ 鍏卞悓鐞嗚В鐨勬暟鎹粨鏋勩€佸父閲忓拰璁块棶绾﹀畾銆?// 鏁版嵁娴侊細CPU 渚у～鍏呰繖浜涚粨鏋勶紝GPU 渚ф寜瀹屽叏鐩稿悓鐨勫唴瀛樺竷灞€璇诲彇鍜屽啓鍥炪€?// 鏂规硶璇存槑锛氬叡浜竷灞€鏄紓鏋勭郴缁熺殑 ABI锛屼换浣曞瓧娈甸『搴忋€佸榻愬拰浣嶅煙鍙樺寲閮戒細褰卞搷涓や晶瑙ｉ噴涓€鑷存€с€?// 姝ｇ‘鎬х害鏉燂細缁撴瀯瀵归綈銆佹爣閲忓竷灞€鍜?缂撳啿 reference 绫诲瀷蹇呴』涓?Vulkan/GLSL 缂栬瘧閫夐」涓€鑷淬€?// 娉ㄩ噴椋庢牸锛氫娇鐢ㄤ腑鏂囪В閲?GPU 渚ц涔夛紱淇濈暀蹇呰鐨?API銆佺被鍨嬪悕鍜屾暟瀛︾缉鍐欎互渚挎绱€?//==============================================================================
+// 渚濊禆璇存槑锛氬紩鍏ュ叡浜竷灞€銆佸墧闄ゃ€佺潃鑹叉垨闃舵闂村鐢ㄧ殑鐫€鑹插櫒鐗囨銆?// 杩欎簺 include 鍏卞悓鍐冲畾鏈枃浠惰兘璁块棶鐨勭粨鏋勫竷灞€銆佹暟瀛﹁緟鍔╁嚱鏁板拰缂栬瘧鏈熷畯銆?#include "shaderio_core.h"
 #include "shaderio_core.h"
 #ifndef _SHADERIO_SCENE_H_
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define _SHADERIO_SCENE_H_
 #define _SHADERIO_SCENE_H_
 #ifdef __cplusplus
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
+// 鍛藉悕绌洪棿璇存槑锛氶檺鍒剁鍙峰彲瑙佽寖鍥达紝骞惰〃鏄庤繖浜涚被鍨嬪拰鍑芥暟灞炰簬鍚屼竴鍔熻兘鍩熴€?// 璇ヨ竟鐣屾湁鍔╀簬鍖哄垎搴旂敤灞傘€佹覆鏌撳眰銆佸満鏅眰鍜岀畻娉曞眰鐨勮亴璐ｃ€?namespace shaderio {
 namespace shaderio {
 using namespace glm;
 
 
-// 枚举：ClusterAttributeBits。集中定义本模块可选模式或状态值，避免调用点使用裸整数。
-// 设计意图：把实验开关、渲染模式或阶段编号显式命名，使配置文件、UI 和代码路径可以互相对应。
-// 使用约束：新增枚举值时需要同步 UI 文本、参数解析和相关 switch 分支。
+// 鏋氫妇锛欳lusterAttributeBits銆傞泦涓畾涔夋湰妯″潡鍙€夋ā寮忔垨鐘舵€佸€硷紝閬垮厤璋冪敤鐐逛娇鐢ㄨ８鏁存暟銆?// 璁捐鎰忓浘锛氭妸瀹為獙寮€鍏炽€佹覆鏌撴ā寮忔垨闃舵缂栧彿鏄惧紡鍛藉悕锛屼娇閰嶇疆鏂囦欢銆乁I 鍜屼唬鐮佽矾寰勫彲浠ヤ簰鐩稿搴斻€?// 浣跨敤绾︽潫锛氭柊澧炴灇涓惧€兼椂闇€瑕佸悓姝?UI 鏂囨湰銆佸弬鏁拌В鏋愬拰鐩稿叧 switch 鍒嗘敮銆?enum ClusterAttributeBits
 enum ClusterAttributeBits
 {
   CLUSTER_ATTRIBUTE_VERTEX_NORMAL           = 1,
@@ -41,76 +31,63 @@ enum ClusterAttributeBits
 #else
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_ATTRIBUTE_VERTEX_NORMAL 1
 #define CLUSTER_ATTRIBUTE_VERTEX_NORMAL 1
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_ATTRIBUTE_VERTEX_TANGENT 2
 #define CLUSTER_ATTRIBUTE_VERTEX_TANGENT 2
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_ATTRIBUTE_VERTEX_TEX_0 4
 #define CLUSTER_ATTRIBUTE_VERTEX_TEX_0 4
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_ATTRIBUTE_VERTEX_TEX_1 8
 #define CLUSTER_ATTRIBUTE_VERTEX_TEX_1 8
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_ATTRIBUTE_COMPRESSED_VERTEX_TEX_0 32
 #define CLUSTER_ATTRIBUTE_COMPRESSED_VERTEX_TEX_0 32
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_ATTRIBUTE_COMPRESSED_VERTEX_TEX_1 64
 #define CLUSTER_ATTRIBUTE_COMPRESSED_VERTEX_TEX_1 64
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_ATTRIBUTE_COMPRESSED_VERTEX_POS 128
 #define CLUSTER_ATTRIBUTE_COMPRESSED_VERTEX_POS 128
 
 #ifndef CLUSTER_VERTEX_COUNT
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_VERTEX_COUNT 32
 #define CLUSTER_VERTEX_COUNT 32
 #endif
 
 #ifndef CLUSTER_TRIANGLE_COUNT
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define CLUSTER_TRIANGLE_COUNT 32
 #define CLUSTER_TRIANGLE_COUNT 32
 #endif
 
 #endif
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define SHADERIO_ORIGINAL_MESH_GROUP 0xffffffffu
 #define SHADERIO_ORIGINAL_MESH_GROUP 0xffffffffu
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define SHADERIO_MAX_LOD_LEVELS 32
 #define SHADERIO_MAX_LOD_LEVELS 32
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define SHADERIO_MAX_NODE_CHILDREN 32
 #define SHADERIO_MAX_NODE_CHILDREN 32
 
 
-// 宏配置说明：定义编译期常量或功能开关，让 CPU 与 GPU 按同一套布局和路径工作。
-// 宏值通常会影响 buffer 大小、工作组规模或条件编译分支，修改后需要同时检查 C++ 和着色器侧。
+// 瀹忛厤缃鏄庯細瀹氫箟缂栬瘧鏈熷父閲忔垨鍔熻兘寮€鍏筹紝璁?CPU 涓?GPU 鎸夊悓涓€濂楀竷灞€鍜岃矾寰勫伐浣溿€?// 瀹忓€奸€氬父浼氬奖鍝?buffer 澶у皬銆佸伐浣滅粍瑙勬ā鎴栨潯浠剁紪璇戝垎鏀紝淇敼鍚庨渶瑕佸悓鏃舵鏌?C++ 鍜岀潃鑹插櫒渚с€?#define SHADERIO_MAX_GROUP_CLUSTERS 128
 #define SHADERIO_MAX_GROUP_CLUSTERS 128
 
 
@@ -129,9 +106,7 @@ enum ClusterAttributeBits
 #define SEMANTIC_LOD_PRIORITY_MASK 0xFu
 
 
-// 结构：BBox。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛欱Box銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct BBox
 struct BBox
 {
   vec3 lo;
@@ -142,13 +117,11 @@ struct BBox
 };
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE(BBox_in, BBox, readonly, 16);
 BUFFER_REF_DECLARE(BBox_in, BBox, readonly, 16);
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_ARRAY(BBoxes_in, BBox, readonly, 16);
 BUFFER_REF_DECLARE_ARRAY(BBoxes_in, BBox, readonly, 16);
 
 
@@ -180,9 +153,7 @@ struct AssemblyState
 BUFFER_REF_DECLARE_ARRAY(AssemblyStates_inout, AssemblyState, , 4);
 
 
-// 结构：Cluster。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛欳luster銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct Cluster
 struct Cluster
 {
   uint8_t triangleCountMinusOne;
@@ -201,44 +172,35 @@ struct Cluster
 };
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE(Cluster_in, Cluster, , 16);
 BUFFER_REF_DECLARE(Cluster_in, Cluster, , 16);
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_ARRAY(Clusters_inout, Cluster, , 16);
 BUFFER_REF_DECLARE_ARRAY(Clusters_inout, Cluster, , 16);
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_SIZE(Cluster_size, Cluster, 16);
 BUFFER_REF_DECLARE_SIZE(Cluster_size, Cluster, 16);
 
 #ifndef __cplusplus
 
 
-// 函数：Cluster_getVertexPositions。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欳luster_getVertexPositions銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?vec3s_in Cluster_getVertexPositions(Cluster_in cluster)
 vec3s_in Cluster_getVertexPositions(Cluster_in cluster)
 {
   return vec3s_in(uint64_t(cluster) + cluster.d.vertices);
 }
 
 
-// 函数：Cluster_getVertexNormals。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欳luster_getVertexNormals銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?uint32s_in Cluster_getVertexNormals(Cluster_in cluster)
 uint32s_in Cluster_getVertexNormals(Cluster_in cluster)
 {
   return uint32s_in(uint64_t(cluster) + (cluster.d.vertices + 4 * 3 * (cluster.d.vertexCountMinusOne + 1)));
 }
 
 
-// 函数：Cluster_getVertexTexCoords。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欳luster_getVertexTexCoords銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?vec2s_in Cluster_getVertexTexCoords(Cluster_in cluster)
 vec2s_in Cluster_getVertexTexCoords(Cluster_in cluster)
 {
 
@@ -247,18 +209,14 @@ vec2s_in Cluster_getVertexTexCoords(Cluster_in cluster)
 }
 
 
-// 函数：Cluster_getTriangleIndices。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欳luster_getTriangleIndices銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?uint8s_in Cluster_getTriangleIndices(Cluster_in cluster)
 uint8s_in Cluster_getTriangleIndices(Cluster_in cluster)
 {
   return uint8s_in(uint64_t(cluster) + cluster.d.indices);
 }
 
 
-// 函数：Cluster_getTriangleMaterials。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欳luster_getTriangleMaterials銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?uint8s_in Cluster_getTriangleMaterials(Cluster_in cluster)
 uint8s_in Cluster_getTriangleMaterials(Cluster_in cluster)
 {
   return uint8s_in(uint64_t(cluster) + (cluster.d.indices + 3 * (cluster.d.triangleCountMinusOne + 1)));
@@ -266,9 +224,7 @@ uint8s_in Cluster_getTriangleMaterials(Cluster_in cluster)
 #endif
 
 
-// 结构：TraversalMetric。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛歍raversalMetric銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct TraversalMetric
 struct TraversalMetric
 {
 
@@ -281,9 +237,7 @@ struct TraversalMetric
 };
 
 
-// 结构：Group。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛欸roup銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct Group
 struct Group
 {
 
@@ -298,35 +252,28 @@ struct Group
 };
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE(Group_in, Group, , 16);
 BUFFER_REF_DECLARE(Group_in, Group, , 16);
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_ARRAY(Groups_in, Group, , 16);
 BUFFER_REF_DECLARE_ARRAY(Groups_in, Group, , 16);
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_SIZE(Group_size, Group, 32);
 BUFFER_REF_DECLARE_SIZE(Group_size, Group, 32);
 
 #ifndef __cplusplus
 
 
-// 函数：Group_getGeneratingGroup。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欸roup_getGeneratingGroup銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?uint Group_getGeneratingGroup(Group_in group, uint clusterIndex)
 uint Group_getGeneratingGroup(Group_in group, uint clusterIndex)
 {
   return uint32s_in(uint64_t(group) + uint32_t(Group_size + Cluster_size * group.d.clusterCount)).d[clusterIndex];
 }
 
 
-// 函数：Group_getClusterBBox。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欸roup_getClusterBBox銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?BBox Group_getClusterBBox(Group_in group, uint clusterIndex)
 BBox Group_getClusterBBox(Group_in group, uint clusterIndex)
 {
   return BBoxes_in(uint64_t(group)
@@ -335,18 +282,14 @@ BBox Group_getClusterBBox(Group_in group, uint clusterIndex)
 }
 
 
-// 函数：Cluster_getGroup。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欳luster_getGroup銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?Group_in Cluster_getGroup(Cluster_in cluster)
 Group_in Cluster_getGroup(Cluster_in cluster)
 {
   return Group_in(uint64_t(cluster) - uint32_t(cluster.d.groupChildIndex * Cluster_size + Group_size));
 }
 
 
-// 函数：Cluster_getBBox。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛欳luster_getBBox銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?BBox Cluster_getBBox(Cluster_in cluster)
 BBox Cluster_getBBox(Cluster_in cluster)
 {
   return Group_getClusterBBox(Cluster_getGroup(cluster), cluster.d.groupChildIndex);
@@ -356,9 +299,7 @@ BBox Cluster_getBBox(Cluster_in cluster)
 #ifdef __cplusplus
 
 
-// 结构：NodeRange。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛歂odeRange銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct NodeRange
 struct NodeRange
 {
   uint32_t isGroup : 1;
@@ -367,9 +308,7 @@ struct NodeRange
 };
 
 
-// 结构：GroupRange。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛欸roupRange銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct GroupRange
 struct GroupRange
 {
   uint32_t isGroup : 1;
@@ -379,9 +318,7 @@ struct GroupRange
 #endif
 
 
-// 结构：Node。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛歂ode銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct Node
 struct Node
 {
 #ifdef __cplusplus
@@ -407,14 +344,11 @@ struct Node
 };
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_ARRAY(Nodes_in, Node, readonly, 8);
 BUFFER_REF_DECLARE_ARRAY(Nodes_in, Node, readonly, 8);
 
 
-// 结构：LodLevel。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛歀odLevel銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct LodLevel
 struct LodLevel
 {
   float    minBoundingSphereRadius;
@@ -426,14 +360,11 @@ struct LodLevel
 };
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_ARRAY(LodLevels_inout, LodLevel, , 8);
 BUFFER_REF_DECLARE_ARRAY(LodLevels_inout, LodLevel, , 8);
 
 
-// 结构：Geometry。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛欸eometry銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct Geometry
 struct Geometry
 {
   uint32_t instancesOffset;
@@ -443,7 +374,6 @@ struct Geometry
 
   uint16_t lowDetailTriangles;
   uint32_t lowDetailClusterID;
-  uint64_t lowDetailBlasAddress;
 
 
   BBox bbox;
@@ -460,24 +390,18 @@ struct Geometry
 
   BUFFER_REF(uint64s_in) preloadedGroups;
   BUFFER_REF(uint64s_in) preloadedClusters;
-  BUFFER_REF(uint64s_in) preloadedClusterClasAddresses;
-  BUFFER_REF(uint32s_in) preloadedClusterClasSizes;
 };
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE(Geometry_in, Geometry, readonly, 16);
 BUFFER_REF_DECLARE(Geometry_in, Geometry, readonly, 16);
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE(Geometry_inout, Geometry, , 16);
 BUFFER_REF_DECLARE(Geometry_inout, Geometry, , 16);
 
 
-// 结构：RenderInstance。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-// 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-// 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+// 缁撴瀯锛歊enderInstance銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?// 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?// 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?struct RenderInstance
 struct RenderInstance
 {
   mat4x3 worldMatrix;
@@ -495,8 +419,7 @@ struct RenderInstance
 };
 
 
-// GPU 指针声明：为设备地址访问建立结构化缓冲引用类型。
-// 该机制允许着色器通过 64 位地址访问 group、cluster、node 等运行时数据。
+// GPU 鎸囬拡澹版槑锛氫负璁惧鍦板潃璁块棶寤虹珛缁撴瀯鍖栫紦鍐插紩鐢ㄧ被鍨嬨€?// 璇ユ満鍒跺厑璁哥潃鑹插櫒閫氳繃 64 浣嶅湴鍧€璁块棶 group銆乧luster銆乶ode 绛夎繍琛屾椂鏁版嵁銆?BUFFER_REF_DECLARE_ARRAY(RenderInstances_in, RenderInstance, readonly, 16);
 BUFFER_REF_DECLARE_ARRAY(RenderInstances_in, RenderInstance, readonly, 16);
 
 #ifdef __cplusplus

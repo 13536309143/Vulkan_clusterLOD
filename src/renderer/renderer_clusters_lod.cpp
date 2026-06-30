@@ -1,13 +1,7 @@
-//==============================================================================
-// 文件：src/renderer/renderer_clusters_lod.cpp
-// 模块定位：簇 LOD 主渲染器实现，组织遍历、构建间接命令、硬件网格着色器、软件光栅、Hi-Z 和 流式加载。
-// 数据流：输入是 FrameConfig、RenderScene 和上一帧遮挡信息；输出是本帧可见 簇 列表、绘制命令、回读数据 和 Hi-Z。
-// 方法说明：该文件实现 GPU 驱动的层次 LOD 渲染：计算阶段选择可见簇，图形/计算光栅阶段并行输出，Hi-Z 在帧间形成遮挡反馈。
-// 正确性约束：阶段 顺序必须满足数据依赖；间接计数必须在 调度/绘制 前写完；two-阶段 culling 要正确维护上一遍可见性。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
-//==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
+﻿//==============================================================================
+// 鏂囦欢锛歴rc/renderer/renderer_clusters_lod.cpp
+// 妯″潡瀹氫綅锛氱皣 LOD 涓绘覆鏌撳櫒瀹炵幇锛岀粍缁囬亶鍘嗐€佹瀯寤洪棿鎺ュ懡浠ゃ€佺‖浠剁綉鏍肩潃鑹插櫒銆佽蒋浠跺厜鏍呫€丠i-Z 鍜?娴佸紡鍔犺浇銆?// 鏁版嵁娴侊細杈撳叆鏄?FrameConfig銆丷enderScene 鍜屼笂涓€甯ч伄鎸′俊鎭紱杈撳嚭鏄湰甯у彲瑙?绨?鍒楄〃銆佺粯鍒跺懡浠ゃ€佸洖璇绘暟鎹?鍜?Hi-Z銆?// 鏂规硶璇存槑锛氳鏂囦欢瀹炵幇 GPU 椹卞姩鐨勫眰娆?LOD 娓叉煋锛氳绠楅樁娈甸€夋嫨鍙绨囷紝鍥惧舰/璁＄畻鍏夋爡闃舵骞惰杈撳嚭锛孒i-Z 鍦ㄥ抚闂村舰鎴愰伄鎸″弽棣堛€?// 姝ｇ‘鎬х害鏉燂細闃舵 椤哄簭蹇呴』婊¤冻鏁版嵁渚濊禆锛涢棿鎺ヨ鏁板繀椤诲湪 璋冨害/缁樺埗 鍓嶅啓瀹岋紱two-闃舵 culling 瑕佹纭淮鎶や笂涓€閬嶅彲瑙佹€с€?// 娉ㄩ噴椋庢牸锛氫娇鐢ㄤ腑鏂囪В閲?CPU 渚ц涔夛紱淇濈暀蹇呰鐨?API銆佺被鍨嬪悕鍜屾暟瀛︾缉鍐欎互渚挎绱€?//==============================================================================
+// 渚濊禆璇存槑锛氬紩鍏ユ湰缂栬瘧鍗曞厓闇€瑕佺殑澶栭儴搴撱€侀」鐩ā鍧楀拰鍏变韩鐫€鑹插櫒甯冨眬銆?// 渚濊禆椤哄簭閫氬父鍙嶆槧鎶借薄灞傛锛氬厛澶栭儴搴擄紝鍐嶉」鐩ā鍧楋紝鏈€鍚庝笌 GPU 鍏变韩鐨勬帴鍙ｅ畾涔夈€?#include <volk.h>
 #include <volk.h>
 #include <nvutils/alignment.hpp>
 #include <fmt/format.h>
@@ -32,53 +26,38 @@ float matrixMaxAbsDelta(const glm::mat4& a, const glm::mat4& b)
 }  // namespace
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
+// 鍛藉悕绌洪棿璇存槑锛氶檺鍒剁鍙峰彲瑙佽寖鍥达紝骞惰〃鏄庤繖浜涚被鍨嬪拰鍑芥暟灞炰簬鍚屼竴鍔熻兘鍩熴€?// 璇ヨ竟鐣屾湁鍔╀簬鍖哄垎搴旂敤灞傘€佹覆鏌撳眰銆佸満鏅眰鍜岀畻娉曞眰鐨勮亴璐ｃ€?namespace lodclusters {
 namespace lodclusters {
 
 
-// 类型：RendererRasterClustersLod。封装本模块的长期状态、资源所有权和对外操作接口。
-// 设计意图：通过成员函数集中维护状态转移，避免调用方直接拼接底层资源生命周期。
-// 使用约束：实例初始化、每帧使用和释放应遵守声明顺序对应的依赖关系。
+// 绫诲瀷锛歊endererRasterClustersLod銆傚皝瑁呮湰妯″潡鐨勯暱鏈熺姸鎬併€佽祫婧愭墍鏈夋潈鍜屽澶栨搷浣滄帴鍙ｃ€?// 璁捐鎰忓浘锛氶€氳繃鎴愬憳鍑芥暟闆嗕腑缁存姢鐘舵€佽浆绉伙紝閬垮厤璋冪敤鏂圭洿鎺ユ嫾鎺ュ簳灞傝祫婧愮敓鍛藉懆鏈熴€?// 浣跨敤绾︽潫锛氬疄渚嬪垵濮嬪寲銆佹瘡甯т娇鐢ㄥ拰閲婃斁搴旈伒瀹堝０鏄庨『搴忓搴旂殑渚濊禆鍏崇郴銆?class RendererRasterClustersLod : public Renderer
 class RendererRasterClustersLod : public Renderer
 {
 public:
 
-
-  // 函数：init。初始化本模块所需状态、资源或 GPU 侧绑定。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
   virtual bool init(Resources& res, RenderScene& rscene, const RendererConfig& config) override;
-
-
-  // 函数：render。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
   virtual void render(VkCommandBuffer primary, Resources& res, RenderScene& rscene, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler) override;
-
-
-  // 函数：updatedFrameBuffer。根据最新状态刷新缓存数据、GPU 地址、描述符或统计信息。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：更新函数负责把“旧状态”推进到“当前状态”，因此要避免部分更新造成 CPU/GPU 视图不一致。
   virtual void updatedFrameBuffer(Resources& res, RenderScene& rscene) override;
-
-
-  // 函数：deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
   virtual void deinit(Resources& res) override;
+
+  // 鍑芥暟锛歩nit銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?  virtual bool init(Resources& res, RenderScene& rscene, const RendererConfig& config) override;
+
+
+  // 鍑芥暟锛歳ender銆傚綍鍒舵垨鎵ц娓叉煋鐩稿叧宸ヤ綔锛屾妸鍑嗗濂界殑鏁版嵁鎻愪氦鍒板綋鍓嶆覆鏌撻樁娈点€?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氭覆鏌撳嚱鏁伴€氬父澶勪簬甯х骇鍏抽敭璺緞锛屽繀椤诲皧閲嶅墠搴忚绠楅樁娈靛啓鍑虹殑璁℃暟銆佸湴鍧€鍜屽悓姝ュ睆闅溿€?  virtual void render(VkCommandBuffer primary, Resources& res, RenderScene& rscene, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler) override;
+
+
+  // 鍑芥暟锛歶pdatedFrameBuffer銆傛牴鎹渶鏂扮姸鎬佸埛鏂扮紦瀛樻暟鎹€丟PU 鍦板潃銆佹弿杩扮鎴栫粺璁′俊鎭€?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氭洿鏂板嚱鏁拌礋璐ｆ妸鈥滄棫鐘舵€佲€濇帹杩涘埌鈥滃綋鍓嶇姸鎬佲€濓紝鍥犳瑕侀伩鍏嶉儴鍒嗘洿鏂伴€犳垚 CPU/GPU 瑙嗗浘涓嶄竴鑷淬€?  virtual void updatedFrameBuffer(Resources& res, RenderScene& rscene) override;
+
+
+  // 鍑芥暟锛歞einit銆傞噴鏀炬垨鍥炴敹鍓嶉潰鍒濆鍖栫殑璧勬簮锛屼繚鎸佺敓鍛藉懆鏈熸垚瀵圭鐞嗐€?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氶噴鏀鹃『搴忚閬靛畧璧勬簮渚濊禆鍏崇郴锛岄伩鍏?GPU 浠嶅彲鑳借闂殑瀵硅薄琚彁鍓嶉攢姣併€?  virtual void deinit(Resources& res) override;
 private:
 
 
-  // 函数：initShaders。初始化本模块所需状态、资源或 GPU 侧绑定。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
+  // 鍑芥暟锛歩nitShaders銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?  bool initShaders(Resources& res, RenderScene& scene, const RendererConfig& config);
   bool initShaders(Resources& res, RenderScene& scene, const RendererConfig& config);
 
 
-  // 结构：Shaders。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+  // 缁撴瀯锛歋haders銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?  // 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?  // 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?  struct Shaders
   struct Shaders
   {
     shaderc::SpvCompilationResult graphicsMesh;
@@ -92,9 +71,7 @@ private:
   };
 
 
-  // 结构：Pipelines。组织一组语义相关的数据字段，供 CPU/GPU 流程或模块内部逻辑共享。
-  // 设计意图：把同一抽象对象的计数、偏移、地址和配置集中存放，降低跨函数传递时的语义丢失。
-  // 使用约束：若该结构被着色器或缓存文件读取，字段顺序、对齐方式和默认值都属于接口契约。
+  // 缁撴瀯锛歅ipelines銆傜粍缁囦竴缁勮涔夌浉鍏崇殑鏁版嵁瀛楁锛屼緵 CPU/GPU 娴佺▼鎴栨ā鍧楀唴閮ㄩ€昏緫鍏变韩銆?  // 璁捐鎰忓浘锛氭妸鍚屼竴鎶借薄瀵硅薄鐨勮鏁般€佸亸绉汇€佸湴鍧€鍜岄厤缃泦涓瓨鏀撅紝闄嶄綆璺ㄥ嚱鏁颁紶閫掓椂鐨勮涔変涪澶便€?  // 浣跨敤绾︽潫锛氳嫢璇ョ粨鏋勮鐫€鑹插櫒鎴栫紦瀛樻枃浠惰鍙栵紝瀛楁椤哄簭銆佸榻愭柟寮忓拰榛樿鍊奸兘灞炰簬鎺ュ彛濂戠害銆?  struct Pipelines
   struct Pipelines
   {
     VkPipeline graphicsMesh            = nullptr;
@@ -120,9 +97,7 @@ private:
 };
 
 
-// 函数：RendererRasterClustersLod::initShaders。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
+// 鍑芥暟锛歊endererRasterClustersLod::initShaders銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene, const RendererConfig& config)
 bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene, const RendererConfig& config)
 {
 
@@ -214,9 +189,7 @@ bool RendererRasterClustersLod::initShaders(Resources& res, RenderScene& rscene,
 }
 
 
-// 函数：RendererRasterClustersLod::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
+// 鍑芥暟锛歊endererRasterClustersLod::init銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const RendererConfig& config)
 bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const RendererConfig& config)
 {
   m_resourceReservedUsage = {};
@@ -466,18 +439,14 @@ bool RendererRasterClustersLod::init(Resources& res, RenderScene& rscene, const 
 }
 
 
-// 函数：getWorkGroupCount。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛歡etWorkGroupCount銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?static uint32_t getWorkGroupCount(uint32_t numThreads, uint32_t workGroupSize)
 static uint32_t getWorkGroupCount(uint32_t numThreads, uint32_t workGroupSize)
 {
   return (numThreads + workGroupSize - 1) / workGroupSize;
 }
 
 
-// 函数：RendererRasterClustersLod::render。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
+// 鍑芥暟锛歊endererRasterClustersLod::render銆傚綍鍒舵垨鎵ц娓叉煋鐩稿叧宸ヤ綔锛屾妸鍑嗗濂界殑鏁版嵁鎻愪氦鍒板綋鍓嶆覆鏌撻樁娈点€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氭覆鏌撳嚱鏁伴€氬父澶勪簬甯х骇鍏抽敭璺緞锛屽繀椤诲皧閲嶅墠搴忚绠楅樁娈靛啓鍑虹殑璁℃暟銆佸湴鍧€鍜屽悓姝ュ睆闅溿€?void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, RenderScene& rscene, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler)
 void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, RenderScene& rscene, const FrameConfig& frame, nvvk::ProfilerGpuTimer& profiler)
 {
   VkMemoryBarrier memBarrier = { VK_STRUCTURE_TYPE_MEMORY_BARRIER };
@@ -533,7 +502,7 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
   if(rscene.useStreaming)
   {
 
-    rscene.sceneStreaming.cmdPreTraversal(cmd, 0, profiler);
+    rscene.sceneStreaming.cmdPreTraversal(cmd, profiler);
 
 
     memBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -652,7 +621,7 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
     if(pass == lastPass && rscene.useStreaming)
     {
 
-      rscene.sceneStreaming.cmdPostTraversal(cmd, 0, true, profiler);
+      rscene.sceneStreaming.cmdPostTraversal(cmd, true, profiler);
     }
     else if(rscene.useStreaming)
     {
@@ -743,9 +712,7 @@ void RendererRasterClustersLod::render(VkCommandBuffer cmd, Resources& res, Rend
 }
 
 
-// 函数：RendererRasterClustersLod::updatedFrameBuffer。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
+// 鍑芥暟锛歊endererRasterClustersLod::updatedFrameBuffer銆傚綍鍒舵垨鎵ц娓叉煋鐩稿叧宸ヤ綔锛屾妸鍑嗗濂界殑鏁版嵁鎻愪氦鍒板綋鍓嶆覆鏌撻樁娈点€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氭覆鏌撳嚱鏁伴€氬父澶勪簬甯х骇鍏抽敭璺緞锛屽繀椤诲皧閲嶅墠搴忚绠楅樁娈靛啓鍑虹殑璁℃暟銆佸湴鍧€鍜屽悓姝ュ睆闅溿€?void RendererRasterClustersLod::updatedFrameBuffer(Resources& res, RenderScene& rscene)
 void RendererRasterClustersLod::updatedFrameBuffer(Resources& res, RenderScene& rscene)
 {
 
@@ -771,9 +738,7 @@ void RendererRasterClustersLod::updatedFrameBuffer(Resources& res, RenderScene& 
 }
 
 
-// 函数：RendererRasterClustersLod::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
+// 鍑芥暟锛歊endererRasterClustersLod::deinit銆傞噴鏀炬垨鍥炴敹鍓嶉潰鍒濆鍖栫殑璧勬簮锛屼繚鎸佺敓鍛藉懆鏈熸垚瀵圭鐞嗐€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氶噴鏀鹃『搴忚閬靛畧璧勬簮渚濊禆鍏崇郴锛岄伩鍏?GPU 浠嶅彲鑳借闂殑瀵硅薄琚彁鍓嶉攢姣併€?void RendererRasterClustersLod::deinit(Resources& res)
 void RendererRasterClustersLod::deinit(Resources& res)
 {
 
@@ -801,9 +766,7 @@ void RendererRasterClustersLod::deinit(Resources& res)
 }
 
 
-// 函数：makeRendererRasterClustersLod。录制或执行渲染相关工作，把准备好的数据提交到当前渲染阶段。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：渲染函数通常处于帧级关键路径，必须尊重前序计算阶段写出的计数、地址和同步屏障。
+// 鍑芥暟锛歮akeRendererRasterClustersLod銆傚綍鍒舵垨鎵ц娓叉煋鐩稿叧宸ヤ綔锛屾妸鍑嗗濂界殑鏁版嵁鎻愪氦鍒板綋鍓嶆覆鏌撻樁娈点€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氭覆鏌撳嚱鏁伴€氬父澶勪簬甯х骇鍏抽敭璺緞锛屽繀椤诲皧閲嶅墠搴忚绠楅樁娈靛啓鍑虹殑璁℃暟銆佸湴鍧€鍜屽悓姝ュ睆闅溿€?std::unique_ptr<Renderer> makeRendererRasterClustersLod()
 std::unique_ptr<Renderer> makeRendererRasterClustersLod()
 {
   return std::make_unique<RendererRasterClustersLod>();

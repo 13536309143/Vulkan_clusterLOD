@@ -1,25 +1,16 @@
-//==============================================================================
-// 文件：src/renderer/preloaded.cpp
-// 模块定位：预加载 GPU 场景实现，判断显存容量、创建 组/簇 数据 缓冲 并填充 着色器 地址。
-// 数据流：输入是 Scene 几何视图；输出是全量驻留的 GPU 数据和 Geometry 地址表。
-// 方法说明：该实现把 CPU 的分散 span 打包成 GPU 连续存储，减少运行时地址修补和缺页处理成本。
-// 正确性约束：容量估算要保守；每个 Geometry 的 low detail、LOD level、node 和 组 地址必须对应正确 缓冲 偏移。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
-//==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
+﻿//==============================================================================
+// 鏂囦欢锛歴rc/renderer/preloaded.cpp
+// 妯″潡瀹氫綅锛氶鍔犺浇 GPU 鍦烘櫙瀹炵幇锛屽垽鏂樉瀛樺閲忋€佸垱寤?缁?绨?鏁版嵁 缂撳啿 骞跺～鍏?鐫€鑹插櫒 鍦板潃銆?// 鏁版嵁娴侊細杈撳叆鏄?Scene 鍑犱綍瑙嗗浘锛涜緭鍑烘槸鍏ㄩ噺椹荤暀鐨?GPU 鏁版嵁鍜?Geometry 鍦板潃琛ㄣ€?// 鏂规硶璇存槑锛氳瀹炵幇鎶?CPU 鐨勫垎鏁?span 鎵撳寘鎴?GPU 杩炵画瀛樺偍锛屽噺灏戣繍琛屾椂鍦板潃淇ˉ鍜岀己椤靛鐞嗘垚鏈€?// 姝ｇ‘鎬х害鏉燂細瀹归噺浼扮畻瑕佷繚瀹堬紱姣忎釜 Geometry 鐨?low detail銆丩OD level銆乶ode 鍜?缁?鍦板潃蹇呴』瀵瑰簲姝ｇ‘ 缂撳啿 鍋忕Щ銆?// 娉ㄩ噴椋庢牸锛氫娇鐢ㄤ腑鏂囪В閲?CPU 渚ц涔夛紱淇濈暀蹇呰鐨?API銆佺被鍨嬪悕鍜屾暟瀛︾缉鍐欎互渚挎绱€?//==============================================================================
+// 渚濊禆璇存槑锛氬紩鍏ユ湰缂栬瘧鍗曞厓闇€瑕佺殑澶栭儴搴撱€侀」鐩ā鍧楀拰鍏变韩鐫€鑹插櫒甯冨眬銆?// 渚濊禆椤哄簭閫氬父鍙嶆槧鎶借薄灞傛锛氬厛澶栭儴搴擄紝鍐嶉」鐩ā鍧楋紝鏈€鍚庝笌 GPU 鍏变韩鐨勬帴鍙ｅ畾涔夈€?#include <volk.h>
 #include <volk.h>
 #include "preloaded.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
+// 鍛藉悕绌洪棿璇存槑锛氶檺鍒剁鍙峰彲瑙佽寖鍥达紝骞惰〃鏄庤繖浜涚被鍨嬪拰鍑芥暟灞炰簬鍚屼竴鍔熻兘鍩熴€?// 璇ヨ竟鐣屾湁鍔╀簬鍖哄垎搴旂敤灞傘€佹覆鏌撳眰銆佸満鏅眰鍜岀畻娉曞眰鐨勮亴璐ｃ€?namespace lodclusters {
 namespace lodclusters {
 
 
-// 函数：ScenePreloaded::canPreload。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
+// 鍑芥暟锛歋cenePreloaded::canPreload銆備粠鏂囦欢銆佺紦瀛樸€丟PU 缂撳啿鎴栧叡浜竷灞€涓鍙栨暟鎹苟杞崲涓烘湰妯″潡鏍煎紡銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍙栬矾寰勯渶瑕佹牎楠岃緭鍏ュ悎娉曟€э紝骞舵妸澶栭儴鏍煎紡鐨勪笉纭畾鎬ц浆鍖栦负鍐呴儴纭畾甯冨眬銆?bool ScenePreloaded::canPreload(VkDeviceSize deviceLocalHeapSize, const Scene* scene)
 bool ScenePreloaded::canPreload(VkDeviceSize deviceLocalHeapSize, const Scene* scene)
 {
   VkDeviceSize sizeLimit = (deviceLocalHeapSize * 600) / 1000;
@@ -50,9 +41,7 @@ bool ScenePreloaded::canPreload(VkDeviceSize deviceLocalHeapSize, const Scene* s
 }
 
 
-// 函数：ScenePreloaded::init。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
+// 鍑芥暟锛歋cenePreloaded::init銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& config)
 bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& config)
 {
 
@@ -74,9 +63,7 @@ bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& conf
   m_geometries.resize(scene->getActiveGeometryCount());
 
 
-  // 函数：uploader。从文件、缓存、GPU 缓冲或共享布局中读取数据并转换为本模块格式。
-  // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-  // 设计要点：读取路径需要校验输入合法性，并把外部格式的不确定性转化为内部确定布局。
+  // 鍑芥暟锛歶ploader銆備粠鏂囦欢銆佺紦瀛樸€丟PU 缂撳啿鎴栧叡浜竷灞€涓鍙栨暟鎹苟杞崲涓烘湰妯″潡鏍煎紡銆?  // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?  // 璁捐瑕佺偣锛氳鍙栬矾寰勯渶瑕佹牎楠岃緭鍏ュ悎娉曟€э紝骞舵妸澶栭儴鏍煎紡鐨勪笉纭畾鎬ц浆鍖栦负鍐呴儴纭畾甯冨眬銆?  Resources::BatchedUploader uploader(*res);
   Resources::BatchedUploader uploader(*res);
 
   uint32_t instancesOffset = 0;
@@ -101,8 +88,7 @@ bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& conf
       }
     }
 
-    res->createBuffer(preloadGeometry.groupData, groupDataSize,
-                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+    res->createBuffer(preloadGeometry.groupData, groupDataSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
     NVVK_DBG_NAME(preloadGeometry.groupData.buffer);
 
@@ -180,9 +166,7 @@ bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& conf
       const Scene::GroupInfo groupInfo = sceneGeometry.groupInfos[g];
 
 
-      // 函数：groupView。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-      // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-      // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+      // 鍑芥暟锛歡roupView銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?      // 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?      // 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?      const Scene::GroupView groupView(sceneGeometry.groupData, groupInfo);
       const Scene::GroupView groupView(sceneGeometry.groupData, groupInfo);
       uint64_t               groupVA = preloadGeometry.groupData.address + groupDataOffset;
 
@@ -217,9 +201,7 @@ bool ScenePreloaded::init(Resources* res, const Scene* scene, const Config& conf
 }
 
 
-// 函数：ScenePreloaded::deinit。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
+// 鍑芥暟锛歋cenePreloaded::deinit銆傞噴鏀炬垨鍥炴敹鍓嶉潰鍒濆鍖栫殑璧勬簮锛屼繚鎸佺敓鍛藉懆鏈熸垚瀵圭鐞嗐€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氶噴鏀鹃『搴忚閬靛畧璧勬簮渚濊禆鍏崇郴锛岄伩鍏?GPU 浠嶅彲鑳借闂殑瀵硅薄琚彁鍓嶉攢姣併€?void ScenePreloaded::deinit()
 void ScenePreloaded::deinit()
 {
   if(!m_resources)

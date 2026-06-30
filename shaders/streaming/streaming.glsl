@@ -9,7 +9,7 @@
 // 函数：streamingAgeFilter。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
 // 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
 // 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
-void streamingAgeFilter(uint residentID, uint geometryID, Group_in groupRef, bool useBlasCaching)
+void streamingAgeFilter(uint residentID, uint geometryID, Group_in groupRef)
 {
 #if STREAMING_DEBUG_ADDRESSES
   if (uint64_t(groupRef) >= STREAMING_INVALID_ADDRESS_START)
@@ -21,17 +21,6 @@ void streamingAgeFilter(uint residentID, uint geometryID, Group_in groupRef, boo
 
 
   uint age = streaming.resident.groups.d[residentID].age;
-
-  if (useBlasCaching)
-  {
-    uint lodLevel    = streaming.resident.groups.d[residentID].lodLevel;
-    uint cachedLevel = build.geometryBuildInfos.d[geometryID].cachedLevel;
-
-
-    if (lodLevel >= cachedLevel) {
-      age = 0;
-    }
-  }
 
   if (age < 0xFFFF)
   {

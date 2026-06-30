@@ -1,27 +1,18 @@
-//==============================================================================
-// 文件：src/app/lodclusters_lifecycle.cpp
-// 模块定位：应用挂载、释放、窗口尺寸变化、渲染器重建和 ImGui 纹理桥接的生命周期实现。
-// 数据流：输入是 nvapp 回调和窗口大小；输出是已匹配当前 帧缓冲 的资源、描述符和 renderer 实例。
-// 方法说明：生命周期函数把 Vulkan 对象的创建/销毁拓扑固定下来，避免图像、描述符和 管线 之间出现悬垂引用。
-// 正确性约束：释放前需要等待 GPU 空闲；帧缓冲 变化必须刷新 ImGui 图像和 renderer 描述符；renderer 销毁早于 Resources 销毁。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
-//==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
+﻿//==============================================================================
+// 鏂囦欢锛歴rc/app/lodclusters_lifecycle.cpp
+// 妯″潡瀹氫綅锛氬簲鐢ㄦ寕杞姐€侀噴鏀俱€佺獥鍙ｅ昂瀵稿彉鍖栥€佹覆鏌撳櫒閲嶅缓鍜?ImGui 绾圭悊妗ユ帴鐨勭敓鍛藉懆鏈熷疄鐜般€?// 鏁版嵁娴侊細杈撳叆鏄?nvapp 鍥炶皟鍜岀獥鍙ｅぇ灏忥紱杈撳嚭鏄凡鍖归厤褰撳墠 甯х紦鍐?鐨勮祫婧愩€佹弿杩扮鍜?renderer 瀹炰緥銆?// 鏂规硶璇存槑锛氱敓鍛藉懆鏈熷嚱鏁版妸 Vulkan 瀵硅薄鐨勫垱寤?閿€姣佹嫇鎵戝浐瀹氫笅鏉ワ紝閬垮厤鍥惧儚銆佹弿杩扮鍜?绠＄嚎 涔嬮棿鍑虹幇鎮瀭寮曠敤銆?// 姝ｇ‘鎬х害鏉燂細閲婃斁鍓嶉渶瑕佺瓑寰?GPU 绌洪棽锛涘抚缂撳啿 鍙樺寲蹇呴』鍒锋柊 ImGui 鍥惧儚鍜?renderer 鎻忚堪绗︼紱renderer 閿€姣佹棭浜?Resources 閿€姣併€?// 娉ㄩ噴椋庢牸锛氫娇鐢ㄤ腑鏂囪В閲?CPU 渚ц涔夛紱淇濈暀蹇呰鐨?API銆佺被鍨嬪悕鍜屾暟瀛︾缉鍐欎互渚挎绱€?//==============================================================================
+// 渚濊禆璇存槑锛氬紩鍏ユ湰缂栬瘧鍗曞厓闇€瑕佺殑澶栭儴搴撱€侀」鐩ā鍧楀拰鍏变韩鐫€鑹插櫒甯冨眬銆?// 渚濊禆椤哄簭閫氬父鍙嶆槧鎶借薄灞傛锛氬厛澶栭儴搴擄紝鍐嶉」鐩ā鍧楋紝鏈€鍚庝笌 GPU 鍏变韩鐨勬帴鍙ｅ畾涔夈€?#include <volk.h>
 #include <volk.h>
 #include <fmt/format.h>
 #include <nvutils/file_operations.hpp>
 #include "lodclusters.hpp"
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
+// 鍛藉悕绌洪棿璇存槑锛氶檺鍒剁鍙峰彲瑙佽寖鍥达紝骞惰〃鏄庤繖浜涚被鍨嬪拰鍑芥暟灞炰簬鍚屼竴鍔熻兘鍩熴€?// 璇ヨ竟鐣屾湁鍔╀簬鍖哄垎搴旂敤灞傘€佹覆鏌撳眰銆佸満鏅眰鍜岀畻娉曞眰鐨勮亴璐ｃ€?namespace lodclusters {
 namespace lodclusters {
 
 
-// 函数：LodClusters::onResize。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛歀odClusters::onResize銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?void LodClusters::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
 void LodClusters::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
 {
   m_windowSize = size;
@@ -38,9 +29,7 @@ void LodClusters::onResize(VkCommandBuffer cmd, const VkExtent2D& size)
 }
 
 
-// 函数：LodClusters::updateImguiImage。根据最新状态刷新缓存数据、GPU 地址、描述符或统计信息。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：更新函数负责把“旧状态”推进到“当前状态”，因此要避免部分更新造成 CPU/GPU 视图不一致。
+// 鍑芥暟锛歀odClusters::updateImguiImage銆傛牴鎹渶鏂扮姸鎬佸埛鏂扮紦瀛樻暟鎹€丟PU 鍦板潃銆佹弿杩扮鎴栫粺璁′俊鎭€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氭洿鏂板嚱鏁拌礋璐ｆ妸鈥滄棫鐘舵€佲€濇帹杩涘埌鈥滃綋鍓嶇姸鎬佲€濓紝鍥犳瑕侀伩鍏嶉儴鍒嗘洿鏂伴€犳垚 CPU/GPU 瑙嗗浘涓嶄竴鑷淬€?void LodClusters::updateImguiImage()
 void LodClusters::updateImguiImage()
 {
   if(m_imguiTexture)
@@ -61,9 +50,7 @@ void LodClusters::updateImguiImage()
 }
 
 
-// 函数：LodClusters::deinitRenderer。释放或回收前面初始化的资源，保持生命周期成对管理。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：释放顺序要遵守资源依赖关系，避免 GPU 仍可能访问的对象被提前销毁。
+// 鍑芥暟锛歀odClusters::deinitRenderer銆傞噴鏀炬垨鍥炴敹鍓嶉潰鍒濆鍖栫殑璧勬簮锛屼繚鎸佺敓鍛藉懆鏈熸垚瀵圭鐞嗐€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氶噴鏀鹃『搴忚閬靛畧璧勬簮渚濊禆鍏崇郴锛岄伩鍏?GPU 浠嶅彲鑳借闂殑瀵硅薄琚彁鍓嶉攢姣併€?void LodClusters::deinitRenderer()
 void LodClusters::deinitRenderer()
 {
   NVVK_CHECK(vkDeviceWaitIdle(m_app->getDevice()));
@@ -77,9 +64,7 @@ void LodClusters::deinitRenderer()
 }
 
 
-// 函数：LodClusters::initRenderer。初始化本模块所需状态、资源或 GPU 侧绑定。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：初始化过程建立后续阶段假定存在的不变量，例如句柄有效、缓冲大小足够、描述符已绑定。
+// 鍑芥暟锛歀odClusters::initRenderer銆傚垵濮嬪寲鏈ā鍧楁墍闇€鐘舵€併€佽祫婧愭垨 GPU 渚х粦瀹氥€?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氬垵濮嬪寲杩囩▼寤虹珛鍚庣画闃舵鍋囧畾瀛樺湪鐨勪笉鍙橀噺锛屼緥濡傚彞鏌勬湁鏁堛€佺紦鍐插ぇ灏忚冻澶熴€佹弿杩扮宸茬粦瀹氥€?void LodClusters::initRenderer(RendererType rtype)
 void LodClusters::initRenderer(RendererType rtype)
 {
 
@@ -121,9 +106,7 @@ void LodClusters::initRenderer(RendererType rtype)
 }
 
 
-// 函数：LodClusters::onAttach。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛歀odClusters::onAttach銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?void LodClusters::onAttach(nvapp::Application* app)
 void LodClusters::onAttach(nvapp::Application* app)
 {
   m_app = app;
@@ -153,12 +136,6 @@ void LodClusters::onAttach(nvapp::Application* app)
   {
 
     m_ui.enumAdd(GUI_RENDERER, RENDERER_RASTER_CLUSTERS_LOD, "Rasterization");
-
-    m_ui.enumAdd(GUI_BUILDMODE, 0, "default");
-
-    m_ui.enumAdd(GUI_BUILDMODE, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR, "fast build");
-
-    m_ui.enumAdd(GUI_BUILDMODE, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, "fast trace");
 
     {
       for(uint32_t i = 0; i < NUM_CLUSTER_CONFIGS; i++)
@@ -271,9 +248,7 @@ void LodClusters::onAttach(nvapp::Application* app)
 }
 
 
-// 函数：LodClusters::onDetach。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛歀odClusters::onDetach銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?void LodClusters::onDetach()
 void LodClusters::onDetach()
 {
   NVVK_CHECK(vkDeviceWaitIdle(m_app->getDevice()));
@@ -296,9 +271,7 @@ void LodClusters::onDetach()
 }
 
 
-// 函数：LodClusters::parameterSequenceCallback。封装本文件中的一段核心逻辑，保持调用方只依赖清晰的接口语义。
-// 输入/输出：输入由参数、成员状态或绑定资源提供；输出通常表现为返回值、成员状态更新、GPU 缓冲写入或命令缓冲记录。
-// 设计要点：该函数的主要价值在于隔离局部实现细节，使模块边界和调用顺序更容易审查。
+// 鍑芥暟锛歀odClusters::parameterSequenceCallback銆傚皝瑁呮湰鏂囦欢涓殑涓€娈垫牳蹇冮€昏緫锛屼繚鎸佽皟鐢ㄦ柟鍙緷璧栨竻鏅扮殑鎺ュ彛璇箟銆?// 杈撳叆/杈撳嚭锛氳緭鍏ョ敱鍙傛暟銆佹垚鍛樼姸鎬佹垨缁戝畾璧勬簮鎻愪緵锛涜緭鍑洪€氬父琛ㄧ幇涓鸿繑鍥炲€笺€佹垚鍛樼姸鎬佹洿鏂般€丟PU 缂撳啿鍐欏叆鎴栧懡浠ょ紦鍐茶褰曘€?// 璁捐瑕佺偣锛氳鍑芥暟鐨勪富瑕佷环鍊煎湪浜庨殧绂诲眬閮ㄥ疄鐜扮粏鑺傦紝浣挎ā鍧楄竟鐣屽拰璋冪敤椤哄簭鏇村鏄撳鏌ャ€?void LodClusters::parameterSequenceCallback(const nvutils::ParameterSequencer::State& state)
 void LodClusters::parameterSequenceCallback(const nvutils::ParameterSequencer::State& state)
 {
   std::string message;

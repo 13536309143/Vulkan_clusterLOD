@@ -1,4 +1,4 @@
-//==============================================================================
+﻿//==============================================================================
 // 文件：src/app/lodclusters.hpp
 // 模块定位：顶层应用元素声明，集中描述场景、渲染器、流式加载、帧配置、用户界面和相机状态的所有权关系。
 // 数据流：上层 nvapp 通过生命周期回调驱动该类型；该类型再把状态变更传播到 Scene、RenderScene、Renderer 和 Resources。
@@ -136,7 +136,6 @@ public:
   enum GuiEnums
   {
     GUI_RENDERER,
-    GUI_BUILDMODE,
     GUI_SUPERSAMPLE,
     GUI_MESHLET,
     GUI_VISUALIZE,
@@ -348,7 +347,6 @@ private:
   RendererConfig            m_rendererConfig;
   RendererConfig            m_rendererConfigLast;
 
-  std::vector<uint32_t> m_streamClasHistogram;
   std::vector<uint32_t> m_streamGeometryHistogram;
   uint32_t              m_streamGeometryHistogramMax;
   int32_t               m_streamHistogramOffset = 0;

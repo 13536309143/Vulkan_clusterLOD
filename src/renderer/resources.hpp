@@ -1,4 +1,4 @@
-//==============================================================================
+﻿//==============================================================================
 // 文件：src/renderer/resources.hpp
 // 模块定位：Vulkan 资源管理声明，封装设备、队列、帧缓冲、上传器、着色器编译、内存统计和通用命令辅助。
 // 数据流：上层 renderer 请求资源创建、上传和同步；Resources 负责转换为 Vulkan 句柄和命令缓冲操作。
@@ -62,10 +62,6 @@ struct FrameConfig
 
 
   uint32_t traversalPersistentThreads = 2048;
-
-  uint32_t sharingTolerantLevels = 7;
-  uint32_t sharingEnabledLevels  = 8;
-  bool     sharingPushCulled     = true;
 
   uint32_t cachingEnabledLevels = 8;
   uint32_t cachingAgeThreshold  = 16;

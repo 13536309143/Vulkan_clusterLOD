@@ -100,6 +100,6 @@ void main()
     uint geometryID   = streaming.resident.groups.d[residentID].geometryID;
 
 
-    streamingAgeFilter(residentID, geometryID, groupRef, false);
+    streamingAgeFilter(residentID, geometryID, groupRef);
   }
 }

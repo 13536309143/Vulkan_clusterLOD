@@ -1,20 +1,13 @@
-//==============================================================================
-// 文件：src/app/lodclusters_config.cpp
-// 模块定位：构造函数和默认参数注册实现，定义应用可从命令行、配置文件和 UI 调整的主要实验变量。
-// 数据流：输入是 Info 中的参数注册器、解析器和 性能分析器；输出是默认 FrameConfig、SceneConfig、RendererConfig 与 StreamingConfig。
-// 方法说明：该文件把渲染实验的控制变量显式参数化，便于复现实验、批处理序列和性能对比。
-// 正确性约束：默认值必须与 着色器 侧常量和 UI 选项保持一致；新增参数需要同步考虑配置加载、序列化和统计输出。
-// 注释风格：使用中文解释 CPU 侧语义；保留必要的 API、类型名和数学缩写以便检索。
-//==============================================================================
-// 依赖说明：引入本编译单元需要的外部库、项目模块和共享着色器布局。
-// 依赖顺序通常反映抽象层次：先外部库，再项目模块，最后与 GPU 共享的接口定义。
+﻿//==============================================================================
+// 鏂囦欢锛歴rc/app/lodclusters_config.cpp
+// 妯″潡瀹氫綅锛氭瀯閫犲嚱鏁板拰榛樿鍙傛暟娉ㄥ唽瀹炵幇锛屽畾涔夊簲鐢ㄥ彲浠庡懡浠よ銆侀厤缃枃浠跺拰 UI 璋冩暣鐨勪富瑕佸疄楠屽彉閲忋€?// 鏁版嵁娴侊細杈撳叆鏄?Info 涓殑鍙傛暟娉ㄥ唽鍣ㄣ€佽В鏋愬櫒鍜?鎬ц兘鍒嗘瀽鍣紱杈撳嚭鏄粯璁?FrameConfig銆丼ceneConfig銆丷endererConfig 涓?StreamingConfig銆?// 鏂规硶璇存槑锛氳鏂囦欢鎶婃覆鏌撳疄楠岀殑鎺у埗鍙橀噺鏄惧紡鍙傛暟鍖栵紝渚夸簬澶嶇幇瀹為獙銆佹壒澶勭悊搴忓垪鍜屾€ц兘瀵规瘮銆?// 姝ｇ‘鎬х害鏉燂細榛樿鍊煎繀椤讳笌 鐫€鑹插櫒 渚у父閲忓拰 UI 閫夐」淇濇寔涓€鑷达紱鏂板鍙傛暟闇€瑕佸悓姝ヨ€冭檻閰嶇疆鍔犺浇銆佸簭鍒楀寲鍜岀粺璁¤緭鍑恒€?// 娉ㄩ噴椋庢牸锛氫娇鐢ㄤ腑鏂囪В閲?CPU 渚ц涔夛紱淇濈暀蹇呰鐨?API銆佺被鍨嬪悕鍜屾暟瀛︾缉鍐欎互渚挎绱€?//==============================================================================
+// 渚濊禆璇存槑锛氬紩鍏ユ湰缂栬瘧鍗曞厓闇€瑕佺殑澶栭儴搴撱€侀」鐩ā鍧楀拰鍏变韩鐫€鑹插櫒甯冨眬銆?// 渚濊禆椤哄簭閫氬父鍙嶆槧鎶借薄灞傛锛氬厛澶栭儴搴擄紝鍐嶉」鐩ā鍧楋紝鏈€鍚庝笌 GPU 鍏变韩鐨勬帴鍙ｅ畾涔夈€?#include "lodclusters.hpp"
 #include "lodclusters.hpp"
 
 bool g_verbose = false;
 
 
-// 命名空间说明：限制符号可见范围，并表明这些类型和函数属于同一功能域。
-// 该边界有助于区分应用层、渲染层、场景层和算法层的职责。
+// 鍛藉悕绌洪棿璇存槑锛氶檺鍒剁鍙峰彲瑙佽寖鍥达紝骞惰〃鏄庤繖浜涚被鍨嬪拰鍑芥暟灞炰簬鍚屼竴鍔熻兘鍩熴€?// 璇ヨ竟鐣屾湁鍔╀簬鍖哄垎搴旂敤灞傘€佹覆鏌撳眰銆佸満鏅眰鍜岀畻娉曞眰鐨勮亴璐ｃ€?namespace lodclusters {
 namespace lodclusters {
 
 
@@ -68,7 +61,6 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"loderror"}, &m_frameConfig.lodPixelError);
   m_info.parameterRegistry->add({"shadowray"}, &m_frameConfig.frameConstants.doShadow);
   m_info.parameterRegistry->add({"maxtransfermegabytes"}, (uint32_t*)&m_streamingConfig.maxTransferMegaBytes);
-  m_info.parameterRegistry->add({"maxblascachingmegabytes"}, (uint32_t*)&m_streamingConfig.maxBlasCachingMegaBytes);
   m_info.parameterRegistry->add({"maxgeomegabytes"}, (uint32_t*)&m_streamingConfig.maxGeometryMegaBytes);
   m_info.parameterRegistry->add({"maxresidentgroups"}, &m_streamingConfig.maxGroups);
   m_info.parameterRegistry->add({"maxframeloadrequests"}, &m_streamingConfig.maxPerFrameLoadRequests);
@@ -82,9 +74,6 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"twopassmatrixdelta"}, &m_rendererConfig.twoPassMatrixDelta);
   m_info.parameterRegistry->add({"forcedinvisculling"}, &m_rendererConfig.useForcedInvisibleCulling);
   m_info.parameterRegistry->add({"separategroups"}, &m_rendererConfig.useSeparateGroups);
-  m_info.parameterRegistry->add({"sharingpushculled"}, &m_frameConfig.sharingPushCulled);
-  m_info.parameterRegistry->add({"sharingenabledlevels"}, &m_frameConfig.sharingEnabledLevels);
-  m_info.parameterRegistry->add({"sharingtolerantlevels"}, &m_frameConfig.sharingTolerantLevels);
   m_info.parameterRegistry->add({"cachingenabledlevels"}, &m_frameConfig.cachingEnabledLevels);
   m_info.parameterRegistry->add({"instancesorting"}, &m_rendererConfig.useSorting);
   m_info.parameterRegistry->add({"renderclusterbits"}, &m_rendererConfig.numRenderClusterBits);
@@ -96,7 +85,6 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"facetshading"}, &m_tweak.facetShading);
   m_info.parameterRegistry->add({"flipwinding"}, &m_rendererConfig.flipWinding);
   m_info.parameterRegistry->add({"forcetwosided"}, &m_rendererConfig.forceTwoSided);
-  m_info.parameterRegistry->add({"autosharing", "automatically set blas sharing based on scene's instancing usage. default true"},&m_tweak.autoSharing);
   m_info.parameterRegistry->add({"autosavecache", "automatically store cache file for loaded scene. default true"},&m_sceneLoaderConfig.autoSaveCache);
   m_info.parameterRegistry->add({"autoloadcache", "automatically load cache file if found. default true"},&m_sceneLoaderConfig.autoLoadCache);
   m_info.parameterRegistry->add({"mappedcache", "work from memory mapped cache file, otherwise load to sysmem. default false"},&m_sceneLoaderConfig.memoryMappedCache);
