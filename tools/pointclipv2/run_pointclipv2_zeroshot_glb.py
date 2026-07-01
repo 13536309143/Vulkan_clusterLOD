@@ -1,0 +1,248 @@
+"""Run PointCLIP V2 style zero-shot open-vocabulary inference on GLB mesh nodes.
+
+This wrapper keeps PointCLIP V2 isolated from the PointNeXt environment. It
+reuses PointCLIP V2's realistic point-cloud projection and CLIP image/text
+encoders, but reads the same GLB mesh-node order as the PointNeXt analyzer so
+the resulting CSV can be joined by order, node_index, and mesh_index.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import mmap
+import sys
+from collections import Counter
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import numpy as np
+
+
+def parse_args() -> argparse.Namespace:
+    root = Path(__file__).resolve().parents[2]
+    parser = argparse.ArgumentParser(description="PointCLIP V2 zero-shot GLB mesh-node inference.")
+    parser.add_argument("--glb", type=Path, required=True)
+    parser.add_argument("--pointclip-root", type=Path, default=Path(__file__).resolve().parent / "PointCLIP_V2")
+    parser.add_argument("--prompt-json", type=Path, default=Path(__file__).resolve().parent / "industrial_open_vocab_prompts.json")
+    parser.add_argument("--output-csv", type=Path, required=True)
+    parser.add_argument("--output-json", type=Path, default=None)
+    parser.add_argument("--summary-csv", type=Path, default=None)
+    parser.add_argument("--num-points", type=int, default=8192)
+    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--backbone", default="ViT-B/16", choices=["RN50", "RN101", "ViT-B/32", "ViT-B/16"])
+    parser.add_argument("--device", default="cuda", choices=["cuda"])
+    parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--limit", type=int, default=None, help="Only process the first N mesh nodes for smoke tests.")
+    parser.add_argument("--project-root", type=Path, default=root)
+    return parser.parse_args()
+
+
+def add_import_paths(args: argparse.Namespace) -> None:
+    zeroshot = args.pointclip_root / "zeroshot_cls"
+    pointnext_lod = args.project_root / "tools" / "pointnext_lod"
+    for path in [zeroshot, zeroshot / "Dassl3D", pointnext_lod]:
+        text = str(path.resolve())
+        if text not in sys.path:
+            sys.path.insert(0, text)
+
+
+def load_prompt_library(path: Path) -> Tuple[List[Dict], List[str]]:
+    with path.open("r", encoding="utf-8") as file:
+        data = json.load(file)
+    templates = data.get("templates") or ["a 3D object: {name}."]
+    labels = data.get("labels") or []
+    if not labels:
+        raise ValueError(f"No labels found in prompt library: {path}")
+    return labels, templates
+
+
+def prompts_for_label(label: Dict, templates: List[str]) -> List[str]:
+    names = [label["name"], *label.get("aliases", [])]
+    prompts = []
+    for name in names:
+        for template in templates:
+            prompts.append(template.format(name=name))
+    return prompts
+
+
+def build_text_features(clip_module, model, labels: List[Dict], templates: List[str], device: torch.device) -> torch.Tensor:
+    features = []
+    for label in labels:
+        prompts = prompts_for_label(label, templates)
+        tokens = clip_module.tokenize(prompts).to(device)
+        with torch.no_grad():
+            text = model.encode_text(tokens)
+            text = text / text.norm(dim=-1, keepdim=True)
+            text = text.mean(dim=0)
+            text = text / text.norm()
+        features.append(text)
+    return torch.stack(features, dim=0)
+
+
+def normalize_points(points: np.ndarray) -> np.ndarray:
+    center = (points.max(axis=0) + points.min(axis=0)) * 0.5
+    points = points - center
+    scale = np.linalg.norm(points, axis=1).max()
+    if scale > 1e-12:
+        points = points / scale
+    return points.astype(np.float32, copy=False)
+
+
+def infer_batch(model, projection, text_features, points_batch: List[np.ndarray], top_k: int, device: torch.device):
+    points = torch.from_numpy(np.stack(points_batch, axis=0)).to(device=device, non_blocking=True)
+    with torch.no_grad():
+        images = projection.get_img(points)
+        images = torch.nn.functional.interpolate(images, size=(224, 224), mode="bilinear", align_corners=True)
+        images = images.type(model.dtype)
+        image_features = model.encode_image(images)
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+        num_views = projection.num_views
+        image_features = image_features.reshape(len(points_batch), num_views, -1).mean(dim=1)
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        logits = 100.0 * image_features @ text_features.t()
+        probs = torch.softmax(logits.float(), dim=1)
+        values, indices = torch.topk(probs, k=min(top_k, probs.shape[1]), dim=1)
+    return indices.cpu().numpy(), values.cpu().numpy()
+
+
+def row_from_prediction(base: Dict, labels: List[Dict], idxs: np.ndarray, scores: np.ndarray) -> Dict:
+    top = []
+    for rank, (label_index, score) in enumerate(zip(idxs.tolist(), scores.tolist()), start=1):
+        label = labels[int(label_index)]
+        top.append({
+            "rank": rank,
+            "id": label["id"],
+            "name": label["name"],
+            "role": label["role"],
+            "score": float(score),
+        })
+
+    top1 = top[0]
+    top2 = top[1] if len(top) > 1 else {"id": "", "name": "", "role": "", "score": 0.0}
+    return {
+        **base,
+        "pointclip_top1_id": top1["id"],
+        "pointclip_top1_name": top1["name"],
+        "pointclip_top1_role": top1["role"],
+        "pointclip_top1_score": top1["score"],
+        "pointclip_top2_id": top2["id"],
+        "pointclip_top2_name": top2["name"],
+        "pointclip_top2_role": top2["role"],
+        "pointclip_top2_score": top2["score"],
+        "pointclip_margin": float(top1["score"] - top2["score"]),
+        "pointclip_topk_json": json.dumps(top, ensure_ascii=False),
+    }
+
+
+def write_summary(path: Path, rows: List[Dict]) -> None:
+    role_counter = Counter(row["pointclip_top1_role"] for row in rows)
+    label_counter = Counter(row["pointclip_top1_id"] for row in rows)
+    summary_rows = []
+    for label_id, count in label_counter.most_common():
+        role = next(row["pointclip_top1_role"] for row in rows if row["pointclip_top1_id"] == label_id)
+        avg_score = sum(float(row["pointclip_top1_score"]) for row in rows if row["pointclip_top1_id"] == label_id) / count
+        summary_rows.append({
+            "pointclip_top1_id": label_id,
+            "pointclip_top1_role": role,
+            "count": count,
+            "avg_score": avg_score,
+            "role_total": role_counter[role],
+        })
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        fieldnames = ["pointclip_top1_id", "pointclip_top1_role", "count", "avg_score", "role_total"]
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(summary_rows)
+
+
+def main() -> None:
+    args = parse_args()
+    global torch
+    import torch
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("PointCLIP V2 projection in this wrapper requires CUDA.")
+    add_import_paths(args)
+
+    from clip import clip
+    from trainers.mv_utils_zs import Realistic_Projection
+    from analyze_large_glb_parts_pointnext import read_glb_chunks, mesh_for_node, sample_points
+
+    labels, templates = load_prompt_library(args.prompt_json)
+    device = torch.device(args.device)
+    model, _ = clip.load(args.backbone, device=device)
+    model.eval()
+    text_features = build_text_features(clip, model, labels, templates, device)
+    projection = Realistic_Projection()
+
+    gltf, bin_offset, _ = read_glb_chunks(args.glb)
+    mesh_nodes = [(idx, node) for idx, node in enumerate(gltf.get("nodes", [])) if "mesh" in node]
+    if args.limit is not None:
+        mesh_nodes = mesh_nodes[:args.limit]
+
+    rows: List[Dict] = []
+    pending_base: List[Dict] = []
+    pending_points: List[np.ndarray] = []
+
+    def flush() -> None:
+        if not pending_points:
+            return
+        indices, scores = infer_batch(model, projection, text_features, pending_points, args.top_k, device)
+        for base, idxs, vals in zip(pending_base, indices, scores):
+            rows.append(row_from_prediction(base, labels, idxs, vals))
+        pending_base.clear()
+        pending_points.clear()
+
+    with args.glb.open("rb") as glb_file, mmap.mmap(glb_file.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+        for order, (node_index, node) in enumerate(mesh_nodes, start=1):
+            vertices, faces = mesh_for_node(gltf, mm, bin_offset, node)
+            if len(vertices) == 0:
+                continue
+            mesh = gltf["meshes"][node["mesh"]]
+            rng = np.random.default_rng(args.seed + int(node_index))
+            points = sample_points(vertices, faces, args.num_points, rng)
+            pending_points.append(normalize_points(points))
+            pending_base.append({
+                "order": order,
+                "node_index": node_index,
+                "node_name": node.get("name", f"node_{node_index}"),
+                "mesh_index": int(node["mesh"]),
+                "mesh_name": mesh.get("name", f"mesh_{node['mesh']}"),
+            })
+            if len(pending_points) >= args.batch_size:
+                flush()
+            if order % 500 == 0:
+                print(f"PointCLIPV2 processed {order}/{len(mesh_nodes)} mesh nodes")
+        flush()
+
+    args.output_csv.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "order", "node_index", "node_name", "mesh_index", "mesh_name",
+        "pointclip_top1_id", "pointclip_top1_name", "pointclip_top1_role", "pointclip_top1_score",
+        "pointclip_top2_id", "pointclip_top2_name", "pointclip_top2_role", "pointclip_top2_score",
+        "pointclip_margin", "pointclip_topk_json",
+    ]
+    with args.output_csv.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Wrote: {args.output_csv}")
+
+    if args.output_json:
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        with args.output_json.open("w", encoding="utf-8") as file:
+            json.dump(rows, file, ensure_ascii=False, indent=2)
+        print(f"Wrote: {args.output_json}")
+
+    if args.summary_csv:
+        args.summary_csv.parent.mkdir(parents=True, exist_ok=True)
+        write_summary(args.summary_csv, rows)
+        print(f"Wrote: {args.summary_csv}")
+
+
+if __name__ == "__main__":
+    main()

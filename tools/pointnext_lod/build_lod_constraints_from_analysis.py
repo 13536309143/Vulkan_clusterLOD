@@ -443,6 +443,24 @@ def semantic_role_scores(predicted_class: str, confidence: float, margin: float,
     return {role: clamp01(prior * evidence_quality) for role, prior in priors.items()}
 
 
+def pointclip_role_scores(row: dict) -> dict[str, float]:
+    role = row.get("pointclip_top1_role", "")
+    if role not in ROLE_PROTOTYPES:
+        return {}
+    top1 = to_float(row, "pointclip_top1_score")
+    top2 = to_float(row, "pointclip_top2_score")
+    margin = to_float(row, "pointclip_margin", top1 - top2)
+    # CLIP probabilities are spread over an open vocabulary, so margin matters
+    # more than the absolute top-1 probability.
+    quality = clamp01(0.25 + 1.8 * top1 + 4.0 * max(margin, 0.0))
+    scores = {role: quality}
+
+    second_role = row.get("pointclip_top2_role", "")
+    if second_role in ROLE_PROTOTYPES and second_role != role:
+        scores[second_role] = clamp01((0.15 + 1.2 * top2) * 0.55)
+    return scores
+
+
 def best_role(scores: dict[str, float]) -> tuple[str, float]:
     if not scores:
         return "ordinary_low_detail", 0.0
@@ -456,6 +474,8 @@ def inference_reasons(
     neural_score: float,
     structural_role: str,
     structural_score: float,
+    pointclip_role: str,
+    pointclip_score: float,
     semantic: str,
     reliable: bool,
 ) -> list[str]:
@@ -464,6 +484,8 @@ def inference_reasons(
         reasons.append(f"pointnext_prior={neural_role}:{neural_score:.2f}")
     if structural_score >= 0.55:
         reasons.append(f"structural_match={structural_role}:{structural_score:.2f}")
+    if pointclip_score >= 0.35:
+        reasons.append(f"pointclip_open_vocab={pointclip_role}:{pointclip_score:.2f}")
     if not reliable:
         reasons.append("low_or_ambiguous_pointnext_confidence")
     if features["bulk_score"] >= 0.65:
@@ -499,18 +521,23 @@ def infer_structural_semantics(
     features = structural_feature_vector(row, size_rank, detail_rank, reliable, margin, fallback)
     structural_scores = {role: prototype_match_score(features, role) for role in ROLE_PROTOTYPES}
     neural_scores = semantic_role_scores(predicted_class, confidence, margin, reliable)
+    pointclip_scores = pointclip_role_scores(row)
 
     neural_weight = clamp01(0.18 + 0.58 * confidence + 0.14 * clamp01(margin / 0.30))
     if not reliable:
         neural_weight *= 0.55
-    structural_weight = 1.0 - neural_weight
+    pointclip_role, pointclip_score = best_role(pointclip_scores) if pointclip_scores else ("", 0.0)
+    pointclip_weight = 0.18 * pointclip_score
+    structural_weight = max(0.20, 1.0 - neural_weight - pointclip_weight)
+    total_weight = neural_weight + structural_weight + pointclip_weight
 
     fused_scores = {}
     for role in ROLE_PROTOTYPES:
         fused_scores[role] = (
             neural_weight * neural_scores.get(role, 0.0)
             + structural_weight * structural_scores.get(role, 0.0)
-        )
+            + pointclip_weight * pointclip_scores.get(role, 0.0)
+        ) / max(total_weight, 1e-9)
 
     if features["bulk_score"] >= 0.70 and semantic in {"bulk_static_part", "other_part", "semantic_uncertain"}:
         fused_scores["large_static_bulk"] += 0.18
@@ -547,6 +574,8 @@ def infer_structural_semantics(
         neural_score,
         structural_role,
         structural_score,
+        pointclip_role,
+        pointclip_score,
         semantic,
         reliable,
     )
@@ -559,6 +588,8 @@ def infer_structural_semantics(
         "semantic_structural_score": round(fused_score, 4),
         "neural_role": neural_role,
         "neural_role_score": round(neural_score, 4),
+        "pointclip_role": pointclip_role,
+        "pointclip_role_score": round(pointclip_score, 4),
         "structural_match_role": structural_role,
         "structural_match_score": round(structural_score, 4),
         "protected_features": json.dumps(prototype["protected_features"], ensure_ascii=False),
@@ -608,6 +639,7 @@ def summarize(rows: list[dict], thresholds: dict) -> dict:
         "inferred_role_counts": Counter(row["inferred_role"] for row in rows),
         "function_role_counts": Counter(row["function_role"] for row in rows),
         "neural_role_counts": Counter(row["neural_role"] for row in rows),
+        "pointclip_role_counts": Counter(row["pointclip_role"] for row in rows),
         "structural_match_role_counts": Counter(row["structural_match_role"] for row in rows),
         "lod_priority_counts": Counter(row["lod_priority"] for row in rows),
         "lod_strategy_counts": Counter(row["lod_strategy"] for row in rows),

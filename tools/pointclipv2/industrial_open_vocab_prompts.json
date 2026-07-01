@@ -1,0 +1,106 @@
+{
+  "templates": [
+    "a depth rendering of a {name}.",
+    "a 3D industrial mechanical part: {name}.",
+    "a CAD model of a {name}.",
+    "a point cloud projection of a {name}."
+  ],
+  "labels": [
+    {
+      "id": "bolt_screw",
+      "name": "bolt or screw",
+      "role": "repeated_fastener",
+      "aliases": ["hex head bolt", "socket head screw", "countersunk screw", "threaded bolt", "machine screw"]
+    },
+    {
+      "id": "nut",
+      "name": "nut",
+      "role": "repeated_fastener",
+      "aliases": ["hex nut", "lock nut", "cap nut", "slotted nut", "wing nut"]
+    },
+    {
+      "id": "washer_spacer_ring",
+      "name": "washer spacer or ring",
+      "role": "repeated_fastener",
+      "aliases": ["flat washer", "spring washer", "spacer ring", "retaining ring", "snap ring"]
+    },
+    {
+      "id": "pin_rivet_key",
+      "name": "pin rivet or key",
+      "role": "repeated_fastener",
+      "aliases": ["cylindrical pin", "taper pin", "split pin", "rivet", "shaft key"]
+    },
+    {
+      "id": "bearing_bushing",
+      "name": "bearing or bushing",
+      "role": "critical_preserve",
+      "aliases": ["ball bearing", "plain bearing", "flanged bearing", "bushing", "linear guide"]
+    },
+    {
+      "id": "gear_pulley_chain",
+      "name": "gear pulley or chain drive",
+      "role": "critical_preserve",
+      "aliases": ["spur gear", "right angle gear", "toothed wheel", "pulley", "chain sprocket"]
+    },
+    {
+      "id": "motor_rotor",
+      "name": "motor rotor or geared motor",
+      "role": "critical_preserve",
+      "aliases": ["electric motor", "geared motor", "rotor", "fan motor", "drive motor"]
+    },
+    {
+      "id": "wheel_castor",
+      "name": "wheel or castor",
+      "role": "motion_precision",
+      "aliases": ["wheel", "castor wheel", "caster", "roller wheel"]
+    },
+    {
+      "id": "spring",
+      "name": "spring",
+      "role": "critical_preserve",
+      "aliases": ["coil spring", "compression spring", "extension spring", "spring washer"]
+    },
+    {
+      "id": "pipe_fitting_valve_nozzle",
+      "name": "pipe fitting valve or nozzle",
+      "role": "interface_fluid",
+      "aliases": ["elbow fitting", "standard fitting", "valve", "nozzle", "socket fitting"]
+    },
+    {
+      "id": "joint_clamp_hinge",
+      "name": "joint clamp or hinge",
+      "role": "structural_control",
+      "aliases": ["clamp", "hinge", "fork joint", "articulated joint", "collar"]
+    },
+    {
+      "id": "plate_disc_panel",
+      "name": "plate disc or panel",
+      "role": "large_static_bulk",
+      "aliases": ["flat plate", "disc plate", "mounting plate", "cover plate", "large panel"]
+    },
+    {
+      "id": "handle_lever_knob",
+      "name": "handle lever or knob",
+      "role": "structural_control",
+      "aliases": ["handle", "lever", "knob", "switch handle", "control knob"]
+    },
+    {
+      "id": "impeller_turbine_fan",
+      "name": "impeller turbine or fan",
+      "role": "critical_preserve",
+      "aliases": ["impeller", "turbine wheel", "fan blade", "rotating fluid part"]
+    },
+    {
+      "id": "large_foundation_frame",
+      "name": "large foundation frame or static support",
+      "role": "large_static_bulk",
+      "aliases": ["foundation block", "building frame", "machine base", "large static support", "structural wall"]
+    },
+    {
+      "id": "ordinary_irregular_part",
+      "name": "ordinary irregular industrial part",
+      "role": "ordinary_low_detail",
+      "aliases": ["simple bracket", "plain component", "low detail block", "generic mechanical part"]
+    }
+  ]
+}
