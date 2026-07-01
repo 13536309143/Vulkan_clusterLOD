@@ -1453,7 +1453,7 @@ void LodClusters::onUIRender()
 
           if(semanticInstances == 0)
           {
-            ImGui::TextWrapped("No semantic LOD policy is attached to the current scene. Generate and load *_lod_constraints.csv to populate this table.");
+            ImGui::TextWrapped("No semantic LOD policy is attached to the current scene. Generate and load *_lod_constraints_fused.csv or *_lod_constraints.csv to populate this table.");
           }
           else if(ImGui::BeginTable("##SemanticLodPolicyDistribution", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
           {

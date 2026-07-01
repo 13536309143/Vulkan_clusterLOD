@@ -6,6 +6,7 @@ Home-page: https://github.com/KaiyangZhou/Dassl.pytorch
 Author: Kaiyang Zhou
 License: MIT
 Keywords: Domain Adaptation,Domain Generalization,Semi-Supervised Learning,Pytorch
+Platform: UNKNOWN
 License-File: LICENSE
 
 # Dassl
@@ -280,3 +281,5 @@ If you find this code useful to your research, please give credit to the followi
   year={2020}
 }
 ```
+
+

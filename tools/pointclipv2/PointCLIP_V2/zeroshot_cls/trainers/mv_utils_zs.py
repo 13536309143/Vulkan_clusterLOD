@@ -1,7 +1,14 @@
-from torch_scatter import scatter
 import torch.nn as nn
 import numpy as np
 import torch
+
+try:
+    from torch_scatter import scatter
+except ImportError:
+    def scatter(src, index, dim, out, reduce):
+        if reduce != "max":
+            raise NotImplementedError("PointCLIP V2 fallback scatter only supports reduce='max'")
+        return out.scatter_reduce_(dim, index, src, reduce="amax", include_self=True)
 
 TRANS = -1.5
 
@@ -208,18 +215,17 @@ class Realistic_Projection:
 
 def get2DGaussianKernel(ksize, sigma=0):
     center = ksize // 2
-    xs = (np.arange(ksize, dtype=np.float32) - center)
-    kernel1d = np.exp(-(xs ** 2) / (2 * sigma ** 2))
-    kernel = kernel1d[..., None] @ kernel1d[None, ...] 
-    kernel = torch.from_numpy(kernel)
+    xs = torch.arange(ksize, dtype=torch.float32) - center
+    kernel1d = torch.exp(-(xs ** 2) / (2 * sigma ** 2))
+    kernel = kernel1d[:, None] @ kernel1d[None, :]
     kernel = kernel / kernel.sum()
     return kernel
 
 def get3DGaussianKernel(ksize, depth, sigma=2, zsigma=2):
     kernel2d = get2DGaussianKernel(ksize, sigma)
-    zs = (np.arange(depth, dtype=np.float32) - depth//2)
-    zkernel = np.exp(-(zs ** 2) / (2 * zsigma ** 2))
-    kernel3d = np.repeat(kernel2d[None,:,:], depth, axis=0) * zkernel[:,None, None]
-    kernel3d = kernel3d / torch.sum(kernel3d)
+    zs = torch.arange(depth, dtype=torch.float32) - depth // 2
+    zkernel = torch.exp(-(zs ** 2) / (2 * zsigma ** 2))
+    kernel3d = kernel2d[None, :, :].repeat(depth, 1, 1) * zkernel[:, None, None]
+    kernel3d = kernel3d / kernel3d.sum()
     return kernel3d
         

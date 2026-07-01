@@ -248,6 +248,20 @@ void pushCandidate(std::vector<std::filesystem::path>& candidates, std::unordere
     candidates.push_back(normalized);
 }
 
+void pushCsvNameCandidates(std::vector<std::filesystem::path>& candidates,
+                           std::unordered_set<std::string>&     seen,
+                           const std::filesystem::path&         sceneDir,
+                           const std::filesystem::path&         cwd,
+                           const std::string&                   csvName)
+{
+  pushCandidate(candidates, seen, sceneDir / csvName);
+  pushCandidate(candidates, seen, sceneDir / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, sceneDir.parent_path() / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd.parent_path() / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd.parent_path().parent_path() / "lod_analysis_outputs" / csvName);
+}
+
 }
 
 void Scene::loadSemanticLodPolicies()
@@ -257,18 +271,15 @@ void Scene::loadSemanticLodPolicies()
   m_semanticLodFingerprint = 0;
   m_semanticLodPath.clear();
 
-  const std::string csvName = m_filePath.stem().string() + "_lod_constraints.csv";
+  const std::string fusedCsvName = m_filePath.stem().string() + "_lod_constraints_fused.csv";
+  const std::string csvName      = m_filePath.stem().string() + "_lod_constraints.csv";
   std::vector<std::filesystem::path> candidates;
   std::unordered_set<std::string> seen;
   const std::filesystem::path sceneDir = m_filePath.parent_path();
   const std::filesystem::path cwd = std::filesystem::current_path();
 
-  pushCandidate(candidates, seen, sceneDir / csvName);
-  pushCandidate(candidates, seen, sceneDir / "lod_analysis_outputs" / csvName);
-  pushCandidate(candidates, seen, sceneDir.parent_path() / "lod_analysis_outputs" / csvName);
-  pushCandidate(candidates, seen, cwd / "lod_analysis_outputs" / csvName);
-  pushCandidate(candidates, seen, cwd.parent_path() / "lod_analysis_outputs" / csvName);
-  pushCandidate(candidates, seen, cwd.parent_path().parent_path() / "lod_analysis_outputs" / csvName);
+  pushCsvNameCandidates(candidates, seen, sceneDir, cwd, fusedCsvName);
+  pushCsvNameCandidates(candidates, seen, sceneDir, cwd, csvName);
 
   std::filesystem::path csvPath;
   for(const std::filesystem::path& candidate : candidates)

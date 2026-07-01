@@ -12,12 +12,37 @@ import argparse
 import csv
 import json
 import mmap
+import os
+import struct
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Tuple
+
+# PyTorch, NumPy/MKL, and CLIP can load different OpenMP runtimes on Windows.
+# This script is an offline inference tool, so allowing duplicate OpenMP
+# runtimes is the pragmatic way to keep PointCLIP V2 usable across conda setups.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
 
 import numpy as np
+
+COMPONENT_DTYPES = {
+    5120: np.int8,
+    5121: np.uint8,
+    5122: np.int16,
+    5123: np.uint16,
+    5125: np.uint32,
+    5126: np.float32,
+}
+TYPE_COUNTS = {
+    "SCALAR": 1,
+    "VEC2": 2,
+    "VEC3": 3,
+    "VEC4": 4,
+    "MAT4": 16,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,8 +67,7 @@ def parse_args() -> argparse.Namespace:
 
 def add_import_paths(args: argparse.Namespace) -> None:
     zeroshot = args.pointclip_root / "zeroshot_cls"
-    pointnext_lod = args.project_root / "tools" / "pointnext_lod"
-    for path in [zeroshot, zeroshot / "Dassl3D", pointnext_lod]:
+    for path in [zeroshot, zeroshot / "Dassl3D"]:
         text = str(path.resolve())
         if text not in sys.path:
             sys.path.insert(0, text)
@@ -89,6 +113,139 @@ def normalize_points(points: np.ndarray) -> np.ndarray:
     if scale > 1e-12:
         points = points / scale
     return points.astype(np.float32, copy=False)
+
+
+def read_glb_chunks(path: Path) -> Tuple[dict, int, int]:
+    with path.open("rb") as file:
+        magic, version, _ = struct.unpack("<III", file.read(12))
+        if magic != 0x46546C67 or version != 2:
+            raise ValueError(f"Not a GLB v2 file: {path}")
+
+        json_len, json_type = struct.unpack("<II", file.read(8))
+        if json_type != int.from_bytes(b"JSON", "little"):
+            raise ValueError("First GLB chunk is not JSON")
+        gltf = json.loads(file.read(json_len).decode("utf-8").rstrip("\x00 \t\r\n"))
+
+        bin_header_offset = 12 + 8 + json_len
+        file.seek(bin_header_offset)
+        bin_len, bin_type = struct.unpack("<II", file.read(8))
+        if bin_type != int.from_bytes(b"BIN\x00", "little"):
+            raise ValueError("Second GLB chunk is not BIN")
+        return gltf, bin_header_offset + 8, bin_len
+
+
+def accessor_array(gltf: dict, mm: mmap.mmap, bin_offset: int, accessor_index: int) -> np.ndarray:
+    accessor = gltf["accessors"][accessor_index]
+    view = gltf["bufferViews"][accessor["bufferView"]]
+    dtype = COMPONENT_DTYPES[accessor["componentType"]]
+    item_count = TYPE_COUNTS[accessor["type"]]
+    count = int(accessor["count"])
+    accessor_offset = int(accessor.get("byteOffset", 0))
+    view_offset = int(view.get("byteOffset", 0))
+    stride = view.get("byteStride")
+    start = bin_offset + view_offset + accessor_offset
+
+    if stride is None:
+        total = count * item_count
+        arr = np.frombuffer(mm, dtype=dtype, count=total, offset=start)
+        return np.asarray(arr.reshape(count, item_count) if item_count > 1 else arr)
+
+    rows = []
+    for row in range(count):
+        offset = start + row * int(stride)
+        rows.append(np.frombuffer(mm, dtype=dtype, count=item_count, offset=offset).copy())
+    arr = np.stack(rows, axis=0)
+    return arr.reshape(count, item_count) if item_count > 1 else arr.reshape(count)
+
+
+def quaternion_to_matrix(q: Iterable[float]) -> np.ndarray:
+    x, y, z, w = [float(v) for v in q]
+    n = x * x + y * y + z * z + w * w
+    if n < 1e-12:
+        return np.eye(3, dtype=np.float64)
+    s = 2.0 / n
+    xx, yy, zz = x * x * s, y * y * s, z * z * s
+    xy, xz, yz = x * y * s, x * z * s, y * z * s
+    wx, wy, wz = w * x * s, w * y * s, w * z * s
+    return np.array(
+        [
+            [1.0 - (yy + zz), xy - wz, xz + wy],
+            [xy + wz, 1.0 - (xx + zz), yz - wx],
+            [xz - wy, yz + wx, 1.0 - (xx + yy)],
+        ],
+        dtype=np.float64,
+    )
+
+
+def node_matrix(node: dict) -> np.ndarray:
+    if "matrix" in node:
+        return np.asarray(node["matrix"], dtype=np.float64).reshape(4, 4).T
+    translation = np.asarray(node.get("translation", [0, 0, 0]), dtype=np.float64)
+    scale = np.asarray(node.get("scale", [1, 1, 1]), dtype=np.float64)
+    rotation = quaternion_to_matrix(node.get("rotation", [0, 0, 0, 1]))
+    matrix = np.eye(4, dtype=np.float64)
+    matrix[:3, :3] = rotation @ np.diag(scale)
+    matrix[:3, 3] = translation
+    return matrix
+
+
+def mesh_for_node(gltf: dict, mm: mmap.mmap, bin_offset: int, node: dict) -> Tuple[np.ndarray, np.ndarray]:
+    mesh = gltf["meshes"][node["mesh"]]
+    transform = node_matrix(node)
+    vertices_list = []
+    faces_list = []
+    vertex_offset = 0
+
+    for primitive in mesh.get("primitives", []):
+        position_accessor = primitive.get("attributes", {}).get("POSITION")
+        if position_accessor is None:
+            continue
+        vertices = accessor_array(gltf, mm, bin_offset, position_accessor).astype(np.float32, copy=False)
+        vertices = (vertices.astype(np.float64, copy=False) @ transform[:3, :3].T + transform[:3, 3]).astype(np.float32)
+
+        indices_accessor = primitive.get("indices")
+        if indices_accessor is not None:
+            indices = accessor_array(gltf, mm, bin_offset, indices_accessor).astype(np.int64, copy=False)
+            faces = indices.reshape(-1, 3) if len(indices) >= 3 else np.empty((0, 3), dtype=np.int64)
+        else:
+            faces = np.arange(len(vertices), dtype=np.int64).reshape(-1, 3)
+
+        vertices_list.append(vertices)
+        if len(faces) > 0:
+            faces_list.append(faces + vertex_offset)
+        vertex_offset += len(vertices)
+
+    if not vertices_list:
+        return np.empty((0, 3), dtype=np.float32), np.empty((0, 3), dtype=np.int64)
+    vertices = np.concatenate(vertices_list, axis=0)
+    faces = np.concatenate(faces_list, axis=0) if faces_list else np.empty((0, 3), dtype=np.int64)
+    return vertices, faces
+
+
+def sample_points(vertices: np.ndarray, faces: np.ndarray, num_points: int, rng: np.random.Generator) -> np.ndarray:
+    if len(vertices) == 0:
+        raise ValueError("mesh has no vertices")
+    if len(faces) == 0:
+        replace = len(vertices) < num_points
+        return vertices[rng.choice(len(vertices), size=num_points, replace=replace)].astype(np.float32)
+
+    tri = vertices[faces]
+    edge1 = tri[:, 1] - tri[:, 0]
+    edge2 = tri[:, 2] - tri[:, 0]
+    areas = np.linalg.norm(np.cross(edge1, edge2), axis=1) * 0.5
+    valid = np.isfinite(areas) & (areas > 1e-12)
+    if not np.any(valid):
+        replace = len(vertices) < num_points
+        return vertices[rng.choice(len(vertices), size=num_points, replace=replace)].astype(np.float32)
+
+    tri = tri[valid]
+    areas = areas[valid]
+    probs = areas / areas.sum()
+    chosen = tri[rng.choice(len(tri), size=num_points, replace=True, p=probs)]
+    r1 = np.sqrt(rng.random((num_points, 1), dtype=np.float32))
+    r2 = rng.random((num_points, 1), dtype=np.float32)
+    points = (1 - r1) * chosen[:, 0] + r1 * (1 - r2) * chosen[:, 1] + r1 * r2 * chosen[:, 2]
+    return points.astype(np.float32)
 
 
 def infer_batch(model, projection, text_features, points_batch: List[np.ndarray], top_k: int, device: torch.device):
@@ -170,7 +327,6 @@ def main() -> None:
 
     from clip import clip
     from trainers.mv_utils_zs import Realistic_Projection
-    from analyze_large_glb_parts_pointnext import read_glb_chunks, mesh_for_node, sample_points
 
     labels, templates = load_prompt_library(args.prompt_json)
     device = torch.device(args.device)

@@ -5,29 +5,17 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.7
+  - python=3.10
   - pip
-  - numpy
+  - numpy<2
   - pandas
   - pillow
   - tqdm
   - scipy
+  - scikit-learn
   - ftfy
   - regex
   - yacs
-  - pytorch=1.13
-  - torchvision=0.14
-  - cudatoolkit=11.7
-  - pip:
-      - open_clip_torch==2.20.0
-      - git+https://github.com/openai/CLIP.git
-      - pygltflib
-      - trimesh
-      - gdown
-      - h5py
-      - tensorboard
-      - tabulate
-      - future
-      - yapf
-      - wilds
-      - torch-scatter==2.1.1
+  - pytorch=2.2.0
+  - torchvision=0.17.0
+  - pytorch-cuda=12.1
