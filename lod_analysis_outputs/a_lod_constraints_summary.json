@@ -64,24 +64,24 @@
   },
   "inferred_role_counts": {
     "repeated_fastener": 7615,
-    "large_static_bulk": 593,
+    "large_static_bulk": 539,
     "structural_control": 7404,
     "high_detail_shape": 2723,
     "critical_preserve": 1302,
     "balanced_visible": 206,
-    "ordinary_low_detail": 2307,
+    "ordinary_low_detail": 2361,
     "interface_fluid": 1526,
     "motion_precision": 14,
     "micro_uncertain": 569
   },
   "function_role_counts": {
     "fastening_or_repeated_standard_part": 7615,
-    "large_static_support_or_cover": 593,
+    "large_static_support_or_cover": 539,
     "structural_connector_or_control_surface": 7404,
     "high_detail_visible_shape": 2723,
     "critical_motion_or_transmission_part": 1302,
     "balanced_visible_structure": 206,
-    "ordinary_low_detail_part": 2307,
+    "ordinary_low_detail_part": 2361,
     "interface_or_fluid_connection": 1526,
     "motion_or_precision_guidance": 14,
     "low_confidence_or_micro_detail": 569
@@ -93,6 +93,9 @@
     "interface_fluid": 1656,
     "motion_precision": 16,
     "large_static_bulk": 1500
+  },
+  "pointclip_role_counts": {
+    "": 24259
   },
   "structural_match_role_counts": {
     "ordinary_low_detail": 16504,
@@ -106,24 +109,24 @@
   },
   "lod_priority_counts": {
     "P2_repeated_fastener": 7615,
-    "P3_large_static_bulk": 593,
+    "P3_large_static_bulk": 539,
     "P8_structural_control": 7404,
     "P6_high_detail_shape": 2723,
     "P10_critical_preserve": 1302,
     "P5_balanced_visible": 206,
-    "P4_ordinary_low_detail": 2307,
+    "P4_ordinary_low_detail": 2361,
     "P7_interface_fluid": 1526,
     "P9_motion_precision": 14,
     "P1_micro_uncertain": 569
   },
   "lod_strategy_counts": {
     "repeated_fastener_aggressive": 7615,
-    "large_static_bulk_fast_simplify": 593,
+    "large_static_bulk_fast_simplify": 539,
     "structural_control_protect": 7404,
     "high_detail_shape": 2723,
     "critical_preserve": 1302,
     "balanced_visible_part": 206,
-    "ordinary_low_detail_fast_simplify": 2307,
+    "ordinary_low_detail_fast_simplify": 2361,
     "interface_or_fluid_connection": 1526,
     "motion_precision_protect": 14,
     "micro_uncertain_cull_far": 569

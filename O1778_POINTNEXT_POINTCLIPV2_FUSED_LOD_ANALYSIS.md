@@ -328,3 +328,16 @@ Statistics -> Semantic LOD Policy Distribution
 
 如果 P8/P6 过多，可以后续调低 PointCLIP 对低置信小件的提升权重，或增加尺寸门槛。
 
+| 颜色 | LOD 类别 | 含义 |
+|---|---|---|
+| 灰色 | P1 | `micro_uncertain`，微小/不确定件 |
+| 棕色 | P2 | `repeated_fastener`，螺栓、螺母、垫片、销钉等重复标准件 |
+| 橙黄色 | P3 | `large_static_bulk`，大型静态体块、地基、壳体、板件 |
+| 黄色 | P4 | `ordinary_low_detail`，普通低细节件 |
+| 绿色 | P5 | `balanced_visible`，普通可见结构件 |
+| 青绿色 | P6 | `high_detail_shape`，高细节形状件 |
+| 浅蓝色 | P7 | `interface_fluid`，接口、阀、喷嘴、管接头 |
+| 蓝色 | P8 | `structural_control`，结构连接件、夹具、控制件、把手 |
+| 紫色 | P9 | `motion_precision`，运动/精密导向件 |
+| 粉红/玫红色 | P10 | `critical_preserve`，齿轮、轴承、电机、弹簧等关键件 |
+| 深灰色 | 无语义 LOD | 没有加载到有效 semantic policy |

@@ -62,30 +62,72 @@
     "geom_wire_or_rod": 109,
     "geom_ultra_thin_sheet": 47
   },
+  "inferred_role_counts": {
+    "repeated_fastener": 1272,
+    "balanced_visible": 62,
+    "high_detail_shape": 759,
+    "critical_preserve": 227,
+    "large_static_bulk": 129,
+    "structural_control": 172,
+    "ordinary_low_detail": 320,
+    "interface_fluid": 38,
+    "motion_precision": 16,
+    "micro_uncertain": 54
+  },
+  "function_role_counts": {
+    "fastening_or_repeated_standard_part": 1272,
+    "balanced_visible_structure": 62,
+    "high_detail_visible_shape": 759,
+    "critical_motion_or_transmission_part": 227,
+    "large_static_support_or_cover": 129,
+    "structural_connector_or_control_surface": 172,
+    "ordinary_low_detail_part": 320,
+    "interface_or_fluid_connection": 38,
+    "motion_or_precision_guidance": 16,
+    "low_confidence_or_micro_detail": 54
+  },
+  "neural_role_counts": {
+    "repeated_fastener": 1512,
+    "structural_control": 574,
+    "critical_preserve": 370,
+    "interface_fluid": 97,
+    "large_static_bulk": 459,
+    "motion_precision": 37
+  },
+  "pointclip_role_counts": {
+    "": 3049
+  },
+  "structural_match_role_counts": {
+    "ordinary_low_detail": 1887,
+    "high_detail_shape": 585,
+    "balanced_visible": 474,
+    "large_static_bulk": 83,
+    "critical_preserve": 3,
+    "micro_uncertain": 17
+  },
   "lod_priority_counts": {
-    "P1_micro_or_uncertain": 1149,
-    "P2_aggressive": 1151,
-    "P3_standard": 260,
-    "P5_preserve": 283,
-    "P4_conservative": 206
+    "P2_repeated_fastener": 1272,
+    "P5_balanced_visible": 62,
+    "P6_high_detail_shape": 759,
+    "P10_critical_preserve": 227,
+    "P3_large_static_bulk": 129,
+    "P8_structural_control": 172,
+    "P4_ordinary_low_detail": 320,
+    "P7_interface_fluid": 38,
+    "P9_motion_precision": 16,
+    "P1_micro_uncertain": 54
   },
   "lod_strategy_counts": {
-    "fastener_micro_cull_far": 673,
-    "fastener_repeated_aggressive": 623,
-    "uncertain_small_or_sheet_cull_far": 476,
-    "balanced_visible_part": 161,
-    "preserve_motion_or_precision_key": 227,
-    "ordinary_part_fast_simplify": 374,
-    "control_surface_balanced": 77,
-    "preserve_structural_connector_key": 56,
-    "protect_structural_connector": 103,
-    "protect_control_surface": 50,
-    "interface_part_balanced": 22,
-    "protect_high_detail_shape": 24,
-    "protect_motion_part": 15,
-    "large_static_bulk_fast_simplify": 140,
-    "protect_interface_part": 14,
-    "uncertain_large_fast_simplify": 14
+    "repeated_fastener_aggressive": 1272,
+    "balanced_visible_part": 62,
+    "high_detail_shape": 759,
+    "critical_preserve": 227,
+    "large_static_bulk_fast_simplify": 129,
+    "structural_control_protect": 172,
+    "ordinary_low_detail_fast_simplify": 320,
+    "interface_or_fluid_connection": 38,
+    "motion_precision_protect": 16,
+    "micro_uncertain_cull_far": 54
   },
   "predicted_class_counts": {
     "washers_rings_spacers": 358,
