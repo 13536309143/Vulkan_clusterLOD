@@ -188,6 +188,7 @@ void Scene::ProcessingInfo::logEnd()
       double invVertices = 100.0 / double(std::max<uint64_t>(1, uint64_t(stats.inputFeatureVertices)));
       double avgImportance = double(uint64_t(stats.featureImportanceSumPpm)) / double(std::max<uint64_t>(1, uint64_t(stats.inputFeatureVertices))) / 1000000.0;
       double maxImportance = double(uint64_t(stats.featureImportanceMaxPpm)) / 1000000.0;
+      double avgSemanticDelta = double(uint64_t(stats.semanticImportanceDeltaSumPpm)) / double(std::max<uint64_t>(1, uint64_t(stats.inputFeatureVertices))) / 1000000.0;
 
       LOGI("Feature Retention Stats\n");
       LOGI("Input Feature Vertices:     %12" PRIu64 "\n", uint64_t(stats.inputFeatureVertices));
@@ -204,6 +205,9 @@ void Scene::ProcessingInfo::logEnd()
       LOGI("Thin-Wall Vertices:         %12" PRIu64 " (%5.2f%%)\n", uint64_t(stats.thinWallVertices), double(uint64_t(stats.thinWallVertices)) * invVertices);
       LOGI("Protected Vertices:         %12" PRIu64 " (%5.2f%%)\n", uint64_t(stats.protectedVertices), double(uint64_t(stats.protectedVertices)) * invVertices);
       LOGI("Critical Vertices:          %12" PRIu64 " (%5.2f%%)\n", uint64_t(stats.criticalVertices), double(uint64_t(stats.criticalVertices)) * invVertices);
+      LOGI("Semantic Boosted Vertices:  %12" PRIu64 " (%5.2f%%)\n", uint64_t(stats.semanticBoostedVertices), double(uint64_t(stats.semanticBoostedVertices)) * invVertices);
+      LOGI("Semantic Suppressed Verts:  %12" PRIu64 " (%5.2f%%)\n", uint64_t(stats.semanticSuppressedVertices), double(uint64_t(stats.semanticSuppressedVertices)) * invVertices);
+      LOGI("Avg Semantic Delta:         %12.4f\n", avgSemanticDelta);
       LOGI("Avg Feature Importance:     %12.4f\n", avgImportance);
       LOGI("Max Feature Importance:     %12.4f\n", maxImportance);
       LOGI("\n");
@@ -345,6 +349,9 @@ Scene::Result Scene::init(const std::filesystem::path& filePath,
   m_processingStats.criticalVertices      = uint64_t(processingInfo.stats.criticalVertices);
   m_processingStats.featureImportanceSumPpm = uint64_t(processingInfo.stats.featureImportanceSumPpm);
   m_processingStats.featureImportanceMaxPpm = uint64_t(processingInfo.stats.featureImportanceMaxPpm);
+  m_processingStats.semanticBoostedVertices = uint64_t(processingInfo.stats.semanticBoostedVertices);
+  m_processingStats.semanticSuppressedVertices = uint64_t(processingInfo.stats.semanticSuppressedVertices);
+  m_processingStats.semanticImportanceDeltaSumPpm = uint64_t(processingInfo.stats.semanticImportanceDeltaSumPpm);
 
   if(loadResult != SCENE_RESULT_SUCCESS)
   {

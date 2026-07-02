@@ -109,6 +109,12 @@ clodConfig clodDefaultConfig(size_t max_triangles)
 	config.semantic_confidence = 1.0f;
 	config.feature_soft_scale = 1.0f;
 	config.feature_hard_lock_ratio = 1.0f;
+	config.semantic_structure_weight = 0.0f;
+	config.semantic_boundary_weight = 1.0f;
+	config.semantic_hole_weight = 1.0f;
+	config.semantic_axis_weight = 1.0f;
+	config.semantic_thin_wall_weight = 1.0f;
+	config.semantic_bulk_suppression = 0.0f;
 	config.hierarchy_depth_decay = 0.0f;
 	config.hierarchy_min_ratio = config.simplify_ratio;
 

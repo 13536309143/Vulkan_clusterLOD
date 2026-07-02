@@ -178,6 +178,12 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
   static const float lockByPriority[]     = {1.00f, 0.010f, 0.018f, 0.035f, 0.060f, 0.090f, 0.120f, 0.160f, 0.190f, 0.240f, 0.300f};
   static const float decayByPriority[]    = {0.000f, 0.080f, 0.070f, 0.060f, 0.045f, 0.030f, 0.024f, 0.018f, 0.014f, 0.010f, 0.006f};
   static const float minByPriority[]      = {0.50f, 0.20f, 0.24f, 0.28f, 0.34f, 0.40f, 0.46f, 0.50f, 0.54f, 0.58f, 0.64f};
+  static const float semanticByPriority[] = {0.00f, 0.35f, 0.45f, 0.40f, 0.35f, 0.55f, 0.70f, 0.88f, 0.95f, 1.05f, 1.15f};
+  static const float boundaryByPriority[] = {1.00f, 0.45f, 0.62f, 0.92f, 0.62f, 0.78f, 1.00f, 1.18f, 1.24f, 1.16f, 1.30f};
+  static const float holeByPriority[]     = {1.00f, 0.55f, 0.70f, 1.08f, 0.70f, 0.90f, 1.08f, 1.42f, 1.25f, 1.28f, 1.48f};
+  static const float axisByPriority[]     = {1.00f, 0.30f, 0.82f, 0.45f, 0.55f, 0.70f, 1.02f, 0.92f, 1.02f, 1.36f, 1.40f};
+  static const float thinByPriority[]     = {1.00f, 0.35f, 0.45f, 0.65f, 0.55f, 0.75f, 1.08f, 0.95f, 1.28f, 0.95f, 1.10f};
+  static const float suppressByPriority[] = {0.00f, 0.35f, 0.22f, 0.42f, 0.18f, 0.08f, 0.02f, 0.00f, 0.00f, 0.00f, 0.00f};
   static const uint32_t partitionByPriority[] = {16u, 24u, 24u, 22u, 20u, 16u, 14u, 12u, 11u, 10u, 8u};
 
   const uint32_t priority = std::min<uint32_t>(std::max<uint32_t>(policy.priority, 1), 10);
@@ -199,6 +205,12 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
   policy.featureCriticalThreshold = criticalByPriority[priority];
   policy.featureSoftScale = softByPriority[priority];
   policy.featureHardLockRatio = lockByPriority[priority];
+  policy.semanticStructureWeight = semanticByPriority[priority];
+  policy.semanticBoundaryWeight = boundaryByPriority[priority];
+  policy.semanticHoleWeight = holeByPriority[priority];
+  policy.semanticAxisWeight = axisByPriority[priority];
+  policy.semanticThinWallWeight = thinByPriority[priority];
+  policy.semanticBulkSuppression = suppressByPriority[priority];
   policy.hierarchyDepthDecay = decayByPriority[priority];
   policy.hierarchyMinRatio = minByPriority[priority];
   policy.partitionSize = partitionByPriority[priority];
@@ -207,6 +219,7 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
   {
     policy.featureHardLockRatio *= 0.65f;
     policy.featureSoftScale *= 0.85f;
+    policy.semanticStructureWeight *= 0.75f;
   }
 
   const float weight = std::max(policy.screenErrorWeight, 0.25f);
@@ -409,6 +422,12 @@ void Scene::applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPol
   config.semantic_confidence = policy.confidence;
   config.feature_soft_scale = clampf(policy.featureSoftScale, 0.30f, 2.00f);
   config.feature_hard_lock_ratio = clampf(policy.featureHardLockRatio, 0.0f, 0.35f);
+  config.semantic_structure_weight = clampf(policy.semanticStructureWeight, 0.0f, 1.50f);
+  config.semantic_boundary_weight = clampf(policy.semanticBoundaryWeight, 0.20f, 1.75f);
+  config.semantic_hole_weight = clampf(policy.semanticHoleWeight, 0.20f, 1.90f);
+  config.semantic_axis_weight = clampf(policy.semanticAxisWeight, 0.20f, 1.80f);
+  config.semantic_thin_wall_weight = clampf(policy.semanticThinWallWeight, 0.20f, 1.70f);
+  config.semantic_bulk_suppression = clampf(policy.semanticBulkSuppression, 0.0f, 0.55f);
   config.hierarchy_depth_decay = clampf(policy.hierarchyDepthDecay, 0.0f, 0.09f);
   config.hierarchy_min_ratio = clampf(policy.hierarchyMinRatio, 0.18f, 0.70f);
   config.partition_size = std::max<size_t>(8, std::min<size_t>(24, policy.partitionSize));
