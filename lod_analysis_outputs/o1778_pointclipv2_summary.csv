@@ -1,10 +1,3 @@
-﻿pointclip_top1_id,pointclip_top1_role,count,avg_score,role_total
-joint_clamp_hinge,structural_control,687,0.15896813043296945,781
-pin_rivet_key,repeated_fastener,375,0.21160552157958348,722
-nut,repeated_fastener,214,0.19747617840766907,722
-washer_spacer_ring,repeated_fastener,133,0.22236752801371695,722
-large_foundation_frame,large_static_bulk,110,0.1555601409890435,201
-handle_lever_knob,structural_control,94,0.19482430688878324,781
-plate_disc_panel,large_static_bulk,91,0.15189937068210854,201
-ordinary_irregular_part,ordinary_low_detail,73,0.15899838170368377,73
-pipe_fitting_valve_nozzle,interface_fluid,1,0.13975790143013,1
+version https://git-lfs.github.com/spec/v1
+oid sha256:40f66a201225accf3a8c25220229f4ff46c5d2865957c9da0cc06e60971d6839
+size 645

@@ -1,15 +1,3 @@
-﻿predicted_class,count,avg_confidence,min_confidence,max_confidence,low_conf_lt_0_4,shape_counts
-joints_clamps_structural_connectors,8527,0.5961137048299852,0.11103536188602448,0.9473546147346497,1532,flat_plate:5096; compact_block:1386; irregular:1314; round_or_cubic:511; long_slender:220
-washers_rings_spacers,3760,0.7117763067635291,0.12186042219400406,0.8395894169807434,398,round_or_cubic:1518; flat_plate:1419; irregular:639; long_slender:93; compact_block:91
-screws_bolts_studs,2969,0.6954525046454572,0.13791896402835846,0.8203049898147583,286,irregular:1764; round_or_cubic:704; long_slender:214; compact_block:180; flat_plate:107
-handles_controls,1726,0.4675539380386213,0.11046265065670013,0.7989659309387207,706,irregular:652; compact_block:470; round_or_cubic:340; flat_plate:202; long_slender:62
-pipe_fittings_valves_nozzles,1656,0.7299961536348873,0.12314945459365845,0.810358464717865,115,compact_block:871; round_or_cubic:682; irregular:94; flat_plate:8; long_slender:1
-pins_rivets_keys,1622,0.6124181796770207,0.13482025265693665,0.8179838061332703,317,irregular:564; flat_plate:555; round_or_cubic:232; compact_block:193; long_slender:78
-plates_discs_shapes,1500,0.6161455993751684,0.11787095665931702,0.9335097074508667,372,irregular:614; flat_plate:461; round_or_cubic:340; compact_block:81; long_slender:4
-bearings_bushings_guides,1181,0.5954078369467164,0.1164068952202797,0.8137925863265991,269,compact_block:545; flat_plate:291; round_or_cubic:183; irregular:149; long_slender:13
-nuts,526,0.505085847336983,0.1649196594953537,0.7924380898475647,195,compact_block:252; round_or_cubic:187; irregular:87
-motors_gearmotors,308,0.491876472634348,0.12214494496583939,0.8012961745262146,105,round_or_cubic:151; irregular:88; compact_block:68; long_slender:1
-springs,270,0.5126482310670394,0.14274708926677704,0.9342057704925537,101,flat_plate:127; irregular:94; compact_block:48; round_or_cubic:1
-rotating_fluid_machinery,189,0.3849332700409586,0.10737700015306473,0.81831955909729,121,flat_plate:113; compact_block:43; irregular:18; long_slender:12; round_or_cubic:3
-wheels_castors,16,0.2432535858824849,0.13113130629062653,0.45988038182258606,14,compact_block:11; irregular:5
-gears_pulleys_chains,9,0.18075225585036808,0.141414076089859,0.40341717004776,8,irregular:6; compact_block:2; round_or_cubic:1
+version https://git-lfs.github.com/spec/v1
+oid sha256:73171dbf372995e61f84069b8f384648f19d3082f9fa38fae9cbc0e54126754a
+size 2341

@@ -116,6 +116,10 @@ E:\vk_lod_clusters1\t1\_downloaded_resources\my_model.glb
 cd /d E:\vk_lod_clusters1\t1
 ```
 
+
+```
+conda activate gpt-pointnext
+```
 单模型示例：
 
 ```bat
@@ -168,15 +172,15 @@ python tools\pointclipv2\run_pointclipv2_zeroshot_glb.py ^
 
 ```bat
 python tools\pointclipv2\run_pointclipv2_zeroshot_glb.py ^
-  --glb _downloaded_resources\my_model.glb ^
+  --glb _downloaded_resources\o3049.glb ^
   --pointclip-root tools\pointclipv2\PointCLIP_V2 ^
   --prompt-json tools\pointclipv2\industrial_open_vocab_prompts.json ^
   --num-points 8192 ^
   --batch-size 8 ^
   --top-k 5 ^
-  --output-csv lod_analysis_outputs\my_model_pointclipv2_zeroshot.csv ^
-  --output-json lod_analysis_outputs\my_model_pointclipv2_zeroshot.json ^
-  --summary-csv lod_analysis_outputs\my_model_pointclipv2_summary.csv
+  --output-csv lod_analysis_outputs\o3049_pointclipv2_zeroshot.csv ^
+  --output-json lod_analysis_outputs\o3049_pointclipv2_zeroshot.json ^
+  --summary-csv lod_analysis_outputs\o3049_pointclipv2_summary.csv
 ```
 
 PointCLIP V2 输出关键字段：
@@ -200,15 +204,16 @@ lod_analysis_outputs\my_model_pointnext_analysis.csv
 lod_analysis_outputs\my_model_pointclipv2_zeroshot.csv
 ```
 
+
 执行：
 
 ```bat
 python tools\pointclipv2\fuse_pointnext_pointclip_lod.py ^
-  --pointnext-csv lod_analysis_outputs\my_model_pointnext_analysis.csv ^
-  --pointclip-csv lod_analysis_outputs\my_model_pointclipv2_zeroshot.csv ^
-  --merged-csv lod_analysis_outputs\my_model_pointnext_pointclip_merged.csv ^
-  --output-csv lod_analysis_outputs\my_model_lod_constraints_fused.csv ^
-  --summary-json lod_analysis_outputs\my_model_lod_constraints_fused_summary.json
+  --pointnext-csv lod_analysis_outputs\o3049_pointnext_analysis.csv ^
+  --pointclip-csv lod_analysis_outputs\o3049_pointclipv2_zeroshot.csv ^
+  --merged-csv lod_analysis_outputs\o3049_pointnext_pointclip_merged.csv ^
+  --output-csv lod_analysis_outputs\o3049_lod_constraints_fused.csv ^
+  --summary-json lod_analysis_outputs\o3049_lod_constraints_fused_summary.json
 ```
 
 看到类似输出说明对齐成功：

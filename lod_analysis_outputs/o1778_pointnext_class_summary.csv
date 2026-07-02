@@ -1,15 +1,3 @@
-﻿predicted_class,count,avg_confidence,min_confidence,max_confidence,low_conf_lt_0_4,shape_counts
-pins_rivets_keys,358,0.6405572212358427,0.15437068045139313,0.8159686923027039,66,flat_plate:282; irregular:32; long_slender:25; compact_block:18; round_or_cubic:1
-joints_clamps_structural_connectors,287,0.5940910949005067,0.12925630807876587,0.9475541710853577,96,irregular:129; flat_plate:62; compact_block:57; long_slender:27; round_or_cubic:12
-plates_discs_shapes,279,0.6499603743728344,0.13955043256282806,0.9299364686012268,35,flat_plate:213; irregular:50; round_or_cubic:13; compact_block:3
-bearings_bushings_guides,233,0.5238760087495198,0.15855242311954498,0.804205060005188,84,irregular:121; flat_plate:51; round_or_cubic:30; compact_block:28; long_slender:3
-screws_bolts_studs,157,0.6438080751022716,0.130118265748024,0.8177531361579895,30,long_slender:61; irregular:36; flat_plate:31; compact_block:28; round_or_cubic:1
-handles_controls,103,0.4394951530741256,0.11726999282836914,0.769403874874115,47,irregular:31; long_slender:29; compact_block:18; flat_plate:13; round_or_cubic:12
-nuts,80,0.7157089127227664,0.1724863201379776,0.7784389853477478,7,round_or_cubic:65; compact_block:9; irregular:6
-pipe_fittings_valves_nozzles,67,0.4925088195213631,0.13840831816196442,0.7858120203018188,33,irregular:29; round_or_cubic:21; long_slender:12; compact_block:3; flat_plate:2
-motors_gearmotors,55,0.4506918709386479,0.18201373517513275,0.8647658824920654,36,round_or_cubic:26; irregular:15; long_slender:11; compact_block:3
-washers_rings_spacers,55,0.7207479942928661,0.2336156666278839,0.8063035607337952,5,irregular:41; flat_plate:14
-wheels_castors,31,0.7917390138872208,0.39726531505584717,0.8977526426315308,1,compact_block:26; irregular:4; round_or_cubic:1
-gears_pulleys_chains,29,0.7188269547347365,0.14501312375068665,0.8464462161064148,4,round_or_cubic:19; compact_block:9; irregular:1
-rotating_fluid_machinery,26,0.19785439337675387,0.12726035714149475,0.3606349229812622,26,flat_plate:10; irregular:8; long_slender:7; compact_block:1
-springs,18,0.2708882772260242,0.12541554868221283,0.5925257802009583,15,flat_plate:17; long_slender:1
+version https://git-lfs.github.com/spec/v1
+oid sha256:7280df82680adda14d4d62be8b6daffd743801be38bddf2deb5a020fa7f292d4
+size 2167
