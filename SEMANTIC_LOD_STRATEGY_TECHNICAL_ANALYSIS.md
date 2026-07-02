@@ -1,530 +1,399 @@
 # 语义与结构感知 LOD 策略判断技术分析
 
-本文分析当前项目中“语义 + 结构感知 LOD 约束策略”的关键技术点。它不是使用手册，而是说明系统如何判断一个 mesh 应该进入 P1-P10 哪一类、如何将该分类转化为底层 LOD 构建参数，以及它为什么能服务于工业模型的结构感知简化。
+本文分析当前项目中“语义 + 结构感知 LOD 策略判断”的关键技术点。它不是操作手册，而是说明系统如何判断一个工业模型子 mesh 应进入 P1-P10 哪一类，如何把该判断转化为底层 LOD 构建参数，以及为什么这种方法比单纯几何误差或单一神经分类更适合工业装配模型。
 
 ## 1. 问题定义
 
-传统 meshoptimizer 或 cluster LOD 更关注几何误差、屏幕误差、三角形数和局部拓扑，而工业模型的 LOD 还需要考虑功能语义：
+传统 LOD 通常依据三类信息：
 
 ```text
-螺栓、螺母、垫片等重复标准件
-  -> 数量多，远处应快速简化或剔除。
-
-地基、壳体、墙体、大型板件
-  -> 尺寸大但功能上多为静态支撑，应快速降面。
-
-结构连接件、夹具、控制件
-  -> 对结构理解和视觉辨识重要，应适度保护。
-
-齿轮、轴承、电机、弹簧等关键运动件
-  -> 功能显著，应保留更多几何细节。
+几何误差
+屏幕空间误差
+三角形 / cluster 数量
 ```
 
-因此，本项目的 LOD 策略判断目标不是“分类名完全正确”，而是：
+这对通用模型有效，但对工业模型不够。工业模型里的零件具有明显功能差异：
 
 ```text
-判断该 mesh 在 LOD 构建中应该采用怎样的简化约束强度。
+螺栓、螺母、垫片、销、铆钉
+  -> 数量多、重复性强、远处可快速简化。
+
+地基、外壳、墙体、大板件、大型静态支撑
+  -> 尺寸大，但通常可较快降面，主要保留外轮廓。
+
+夹具、连接件、控制件、铰链、把手
+  -> 对结构理解和交互视觉重要，应适度保护。
+
+齿轮、轴承、电机、导向件、弹簧
+  -> 功能关键，应保留更多轮廓、轴线和接触面。
+
+管件、阀门、喷嘴、接口
+  -> 接口边界重要，不能只按普通小件处理。
 ```
 
-最终输出是 P1-P10 十级策略。
+因此，本项目的策略判断目标不是单纯追求“分类名称完全正确”，而是：
+
+```text
+判断该 mesh 在 LOD 构建中应采用怎样的简化约束强度。
+```
+
+最终输出是 P1-P10 十级语义结构策略。
 
 ## 2. 总体技术路线
 
-当前策略判断由三类证据融合：
+当前系统使用三路证据融合：
 
 ```text
 PointNeXt 闭集分类
   -> 训练过的工业零件类别概率。
 
-PointCLIP V2 开放词表
-  -> 开放语义候选和 role 补充。
+PointCLIP V2 开放词表推断
+  -> 对未知或泛化类别提供开放语义候选。
 
-结构特征库
-  -> 尺寸、细长、薄壁、圆盘/环状、紧凑度、面数密度、大体块倾向等。
+结构特征语义库
+  -> 从 mesh 几何本身提取尺寸、形状、复杂度和结构倾向。
 ```
 
-流程如下：
+完整判断链路如下：
 
 ```text
-GLB mesh node
-  -> PointNeXt: predicted_class, confidence, second_confidence
-  -> PointCLIP V2: pointclip_top1_role, score, margin
-  -> Geometry: bbox, OBB, face_count, surface_area, shape_hint
-  -> semantic + structural role inference
+GLB mesh
+  -> 点云采样
+  -> PointNeXt: predicted_class, confidence, second_class
+  -> PointCLIP V2: top-k open-vocab label, role, score, margin
+  -> Geometry: bbox, OBB, face_count, area, shape_hint
+  -> 结构特征向量
+  -> role prototype matching
+  -> 语义结构融合
   -> inferred_role
   -> P1-P10 policy
-  -> target_ratio / screen_error_weight / allow_cull
-  -> C++ clodConfig
-  -> LOD hierarchy construction
-  -> shader/UI visualization
+  -> target_ratio / allow_cull / screen_error_weight
+  -> clodConfig
+  -> meshoptimizer / cluster LOD 构建
 ```
 
-关键实现文件：
+关键文件：
 
 | 功能 | 文件 |
 |---|---|
-| 离线策略推断 | `tools/pointnext_lod/build_lod_constraints_from_analysis.py` |
-| PointNeXt + PointCLIP 融合 | `tools/pointclipv2/fuse_pointnext_pointclip_lod.py` |
+| PointNeXt GLB 分析 | `tools/pointnext_lod/analyze_large_glb_parts_pointnext.py` |
+| PointNeXt 批量分析 | `tools/pointnext_lod/batch_analyze_glb_lod.py` |
 | PointCLIP V2 GLB 推断 | `tools/pointclipv2/run_pointclipv2_zeroshot_glb.py` |
-| C++ 读取 CSV 并派生策略 | `src/scene/scene_semantic_lod.cpp` |
-| 应用策略到 LOD 构建 | `src/scene/clusterlod.cpp` |
-| cache 失效绑定 | `src/scene/scene_gltf.cpp` |
-| GPU 标志和颜色 | `shaders/interface/shaderio_scene.h`, `shaders/common/render_shading.glsl` |
-| 前端统计 | `src/app/lodclusters_ui.cpp` |
+| PointNeXt + PointCLIP 融合 | `tools/pointclipv2/fuse_pointnext_pointclip_lod.py` |
+| P1-P10 策略生成 | `tools/pointnext_lod/build_lod_constraints_from_analysis.py` |
+| C++ 读取语义 CSV | `src/scene/scene_semantic_lod.cpp` |
+| GLB 加载并绑定 policy | `src/scene/scene_gltf.cpp` |
+| 底层 LOD 构建配置 | `src/meshlod/lod.h`、`src/meshlod/meshlod*.h` |
+| 前端策略统计 | `src/app/lodclusters_ui.cpp` |
+| 着色可视化 | `shaders/common/render_shading.glsl` |
 
 ## 3. P1-P10 策略空间
 
-P1-P10 是语义结构角色的最终离散化结果。它不是简单的“越大越重要”，而是“简化约束越来越保守”。
+P1-P10 不是简单的“编号越大越重要”，而是从快速简化到强保护的语义结构约束空间。
 
-| 优先级 | role | 策略含义 |
-|---|---|---|
-| P1 | micro_uncertain | 微小、低置信、不确定件，远处可剔除 |
-| P2 | repeated_fastener | 重复紧固件，快速简化 |
-| P3 | large_static_bulk | 大型静态体块，快速降面 |
-| P4 | ordinary_low_detail | 普通低细节件 |
-| P5 | balanced_visible | 普通可见结构 |
-| P6 | high_detail_shape | 高细节外形，保留轮廓和特征边 |
-| P7 | interface_fluid | 管路、阀、喷嘴、接口件 |
-| P8 | structural_control | 夹具、连接件、控制件、把手 |
-| P9 | motion_precision | 运动/精密导向件 |
-| P10 | critical_preserve | 齿轮、轴承、电机、弹簧等关键件 |
+| 策略 | role | 工程含义 | 简化倾向 |
+|---|---|---|---|
+| P1 | `micro_uncertain` | 微小或低置信零件 | 最激进，远处可剔除 |
+| P2 | `repeated_fastener` | 螺栓、螺母、垫片、销等重复件 | 激进简化，保留位置和粗轮廓 |
+| P3 | `large_static_bulk` | 大型静态构件、壳体、地基、板件 | 快速降面，保留大轮廓 |
+| P4 | `ordinary_low_detail` | 普通低细节零件 | 中等偏激进 |
+| P5 | `balanced_visible` | 普通可见结构 | 平衡质量和性能 |
+| P6 | `high_detail_shape` | 高细节复杂形状 | 保护轮廓、高曲率和特征边 |
+| P7 | `interface_fluid` | 管件、阀门、喷嘴、接口 | 保护接口边界和安装面 |
+| P8 | `structural_control` | 结构连接、夹具、把手、控制件 | 保护接触面和控制轮廓 |
+| P9 | `motion_precision` | 导向、运动、精密配合件 | 强保护轴线和接触面 |
+| P10 | `critical_preserve` | 齿轮、轴承、电机、传动件 | 最高保护 |
 
-每个 P 级在 Python 侧有一组初始 LOD 参数：
-
-```python
-P10_POLICY_TABLE = {
-  priority: (
-    lod_priority,
-    target_ratio_near,
-    target_ratio_mid,
-    target_ratio_far,
-    allow_cull,
-    screen_error_weight,
-  )
-}
-```
-
-典型趋势：
+策略表在：
 
 ```text
-P1-P3:
-  target_ratio 更低，allow_cull 多为 true，screen_error_weight 较小。
-
-P4-P6:
-  target_ratio 中等，保留可见轮廓和复杂形状。
-
-P7-P10:
-  target_ratio 更高，allow_cull 为 false，screen_error_weight 更大。
+tools/pointnext_lod/build_lod_constraints_from_analysis.py
 ```
 
-## 4. 语义角色原型库
-
-核心思想是先推断“功能角色”，再映射到 P1-P10。当前 role prototype 包含：
+其中 `P10_POLICY_TABLE` 定义了每类策略的：
 
 ```text
-micro_uncertain
-repeated_fastener
-large_static_bulk
-ordinary_low_detail
-balanced_visible
-high_detail_shape
-interface_fluid
-structural_control
-motion_precision
-critical_preserve
-```
-
-每个原型包含：
-
-```text
-priority
-function_role
-strategy
-protected_features
-expected_features
+target_ratio_near
+target_ratio_mid
+target_ratio_far
+allow_cull
+screen_error_weight
 ```
 
 例如：
 
 ```text
-repeated_fastener
-  priority: P2
-  protected_features: placement, head_silhouette, axis_if_visible
-  expected_features: micro_score, slender_score, ring_disk_score, detail_score
+P2 repeated_fastener:
+  near = 0.38
+  mid  = 0.16
+  far  = 0.05
+  allow_cull = true
 
-critical_preserve
-  priority: P10
-  protected_features: periodic_profile, center_axis, contact_surfaces, silhouette
-  expected_features: high_detail_score, ring_disk_score, density_score, compact_score
+P10 critical_preserve:
+  near = 1.00
+  mid  = 0.80
+  far  = 0.55
+  allow_cull = false
 ```
 
-这样做的好处是：
+这意味着 P2 更偏性能，P10 更偏质量。
 
-1. 分类名和 LOD 策略解耦。
-2. PointNeXt、PointCLIP V2、结构特征都可以转化为同一个 role 空间。
-3. 后续增加类别时，不需要直接改底层 LOD 逻辑，只需要扩展 role prior 或 prototype。
+## 4. PointNeXt 闭集证据
 
-## 5. PointNeXt 闭集语义证据
-
-PointNeXt 输出：
+PointNeXt 的作用是提供训练过的工业类别先验。它输出：
 
 ```text
 predicted_class
 confidence
 second_class
 second_confidence
+confidence_margin
 ```
 
-先通过置信度判断可靠性：
+它的优势：
+
+- 对训练集中出现过的工业零件类别稳定。
+- 对螺栓、垫片、轴承、齿轮、管件等闭集类有明确概率。
+- 可以提供 `confidence` 和 `margin`，用于判断是否可靠。
+
+它的局限：
+
+- 只能识别训练类别。
+- 对复合件、非标准件、建筑构件、壳体类大件可能泛化不足。
+- 对非常小的 mesh 或低面数 mesh 可能置信度不稳定。
+
+因此 PointNeXt 不直接决定最终 P1-P10，而是先映射为候选 role prior。
+
+示例：
 
 ```text
-C2_high:
-  confidence >= high_confidence 且 top1-top2 margin 足够大
-
-C1_medium:
-  置信度中等，但没有明显歧义
-
-C0_low_or_ambiguous:
-  confidence 过低或 top1-top2 margin 过小
+screws_bolts_studs      -> repeated_fastener
+nuts                    -> repeated_fastener
+washers_rings_spacers   -> repeated_fastener / interface_fluid
+bearings_bushings_guides -> critical_preserve / motion_precision
+gears_pulleys_chains    -> critical_preserve
+pipe_fittings_valves_nozzles -> interface_fluid
+joints_clamps_structural_connectors -> structural_control
+plates_discs_shapes     -> large_static_bulk / ordinary_low_detail
+handles_controls        -> structural_control / high_detail_shape
 ```
 
-然后将 `predicted_class` 映射到语义组：
+这部分由 `CLASS_ROLE_PRIORS` 描述。
+
+## 5. PointCLIP V2 开放词表证据
+
+PointCLIP V2 用来补足闭集分类的不足。它通过点云多视角投影，将 3D mesh 转为 CLIP 可理解的多视角图像，再与开放词表 prompt 对齐。
+
+输出字段包括：
 
 ```text
-FASTENER_TYPES                 -> fastener_repeated
-MOTION_CRITICAL_TYPES          -> motion_or_precision_part
-INTERFACE_TYPES                -> fluid_or_interface_part
-STRUCTURAL_KEY_TYPES           -> structural_key_part
-BULK_STATIC_TYPES              -> bulk_static_part
-CONTROL_TYPES                  -> control_or_handle
-```
-
-PointNeXt 的语义证据进入 `CLASS_ROLE_PRIORS`：
-
-```python
-"screws_bolts_studs": {"repeated_fastener": 0.95, "motion_precision": 0.15}
-"bearings_bushings_guides": {"critical_preserve": 0.85, "motion_precision": 0.75}
-"plates_discs_shapes": {"large_static_bulk": 0.55, "ordinary_low_detail": 0.45}
-```
-
-它的得分由类别先验、confidence 和 margin 共同决定：
-
-```text
-semantic_score = class_prior * evidence_quality
-```
-
-如果预测不可靠，则降低 PointNeXt 权重，而不是完全丢弃。
-
-## 6. PointCLIP V2 开放词表证据
-
-PointCLIP V2 的作用不是替代 PointNeXt，而是补充开放语义。
-
-输出关键字段：
-
-```text
+pointclip_top1_id
+pointclip_top1_name
 pointclip_top1_role
 pointclip_top1_score
-pointclip_top2_role
+pointclip_top2_name
 pointclip_top2_score
 pointclip_margin
 pointclip_topk_json
 ```
 
-由于开放词表概率会被多个 prompt 分散，PointCLIP V2 的绝对 top1 score 往往不高。因此当前融合更重视：
+PointCLIP V2 的主要价值：
+
+- 遇到训练集外类别时，仍能给出开放语义候选。
+- 能把一些 “PointNeXt 不确定件” 拉回到明确 role。
+- 能识别更抽象的功能角色，例如 structural_control、large_static_bulk。
+- 能减少 old 策略中 P1 堆积的问题。
+
+实际分析中，`b`、`c`、`o1778` 的 fused 结果明显减少了 P1：
 
 ```text
-top1 role 是否落在有效 role 空间
-top1 与 top2 的 margin
-top1 score + margin 的综合质量
+b:     P1 19772 -> 1765
+c:     P1 23198 -> 3085
+o1778: P1 523   -> 57
 ```
 
-质量估计：
+这说明开放词表分支有效提升了低置信样本的可解释性。
 
-```text
-quality = clamp(0.25 + 1.8 * top1 + 4.0 * margin)
-```
+PointCLIP V2 的风险是容易偏向宽泛语义，例如 `structural_control`。因此融合时不能只看 PointCLIP top1，而要结合结构特征和 PointNeXt 置信度。
 
-融合权重：
+## 6. 结构特征语义库
 
-```text
-pointclip_weight = 0.18 * pointclip_score
-```
-
-这意味着 PointCLIP V2 是“弱证据”。它能推动低置信样本，但不应该单独决定高保护策略。
-
-## 7. 结构特征证据
-
-结构特征来自 GLB mesh 的几何统计：
+结构特征不是越多越好。本项目只保留能直接影响 LOD 策略的特征：
 
 ```text
 bbox_diagonal
+bbox_volume
+face_count
+surface_area
 obb_size_long / mid / short
 elongation
 flatness
 compactness
-face_count
-surface_area
 shape_hint
+confidence / margin
 ```
 
-首先按模型内分位数建立尺度阈值：
+这些原始特征进一步转成归一化结构分数：
 
 ```text
-diag_p10, diag_p25, diag_p50, diag_p75, diag_p90, diag_p97
-face_p50, face_p75, face_p90, face_p97
-area_p50, area_p75, area_p90
+micro_score
+size_score
+medium_size_score
+detail_score
+high_detail_score
+density_score
+slender_score
+plate_score
+compact_score
+ring_disk_score
+bulk_score
+simple_score
+uncertainty_score
 ```
 
-这样尺寸判断是“模型内相对尺度”，适合不同量纲和不同大小的工业模型。
+这些分数的目的不是做通用几何描述，而是服务 P1-P10 判定：
 
-结构特征被压缩成归一化评分：
+- `micro_score` 高：更可能 P1 或 P2。
+- `bulk_score` 高：更可能 P3。
+- `high_detail_score` 高：更可能 P6 或 P10。
+- `ring_disk_score` 高：可能是垫片、轴承、接口件。
+- `slender_score` 高：可能是销、杆、螺栓、导向件。
+- `plate_score` 高：可能是板件、薄壁、连接面。
+- `uncertainty_score` 高：降低神经语义权重，增强几何 fallback。
 
-| 特征 | 含义 |
-|---|---|
-| micro_score | 是否微小 |
-| size_score | 相对尺寸等级 |
-| medium_size_score | 是否中等尺寸 |
-| detail_score | 面数/面积/密度综合细节等级 |
-| high_detail_score | 高细节倾向 |
-| density_score | 单位尺度下面数密度 |
-| slender_score | 细长轴状倾向 |
-| plate_score | 薄板/薄壁倾向 |
-| compact_score | 紧凑块体倾向 |
-| ring_disk_score | 圆盘/环状倾向 |
-| bulk_score | 大型静态体块倾向 |
-| simple_score | 低细节简单形状 |
-| uncertainty_score | PointNeXt 歧义程度 |
+结构特征语义库的核心价值是：即使神经分类不稳定，也能通过几何形态把零件归入合理 LOD 策略。
 
-结构 fallback 类别包括：
+## 7. Role Prototype 匹配
+
+每个 role 都有一个结构原型，定义在 `ROLE_PROTOTYPES` 中。例如：
 
 ```text
-geom_ultra_thin_sheet
-geom_thin_plate
-geom_wire_or_rod
-geom_slender_bar
-geom_compact_block
-geom_ring_or_disk
-geom_high_detail_irregular
-geom_simple_irregular
+repeated_fastener:
+  期望 micro / slender / ring_disk 有一定响应
+  策略 repeated_fastener_aggressive
+  保护 placement、head_silhouette、axis_if_visible
+
+large_static_bulk:
+  期望 bulk_score 和 size_score 高
+  策略 large_static_bulk_fast_simplify
+  保护 outer_silhouette、major_openings
+
+critical_preserve:
+  期望 high_detail、ring_disk、density、compact 有响应
+  策略 critical_preserve
+  保护 periodic_profile、center_axis、contact_surfaces
 ```
 
-这些特征是整个系统的稳定锚点。即使神经分类不确定，结构特征仍然可以把大型静态件、薄板、紧固件形状、高细节件分到较合理的 LOD 约束。
-
-## 8. 原型匹配与融合评分
-
-结构特征与每个 role prototype 进行匹配：
+融合脚本会计算：
 
 ```text
-prototype_match = weighted_mean(1 - abs(actual_feature - expected_feature))
+PointNeXt role score
+PointCLIP role score
+Structural prototype score
 ```
 
-权重由 expected feature 大小决定：
-
-```text
-weight = 0.75 + expected_value
-```
-
-最终融合得分：
-
-```text
-fused_score(role) =
-  neural_weight     * PointNeXt_role_score
-  + structural_weight * structural_match_score
-  + pointclip_weight  * PointCLIP_role_score
-```
-
-权重设计：
-
-```text
-neural_weight:
-  随 PointNeXt confidence 和 margin 增加。
-  低置信时降低到 55%。
-
-pointclip_weight:
-  由 PointCLIP role score 控制，最大只占辅助权重。
-
-structural_weight:
-  至少保留 0.20，保证几何结构不会被神经语义完全覆盖。
-```
-
-这套机制避免了两种常见错误：
-
-1. 只看神经网络类别，把大型静态结构误保护。
-2. 只看几何形状，把轴承、齿轮、电机等功能件误简化。
-
-## 9. 规则校正层
-
-融合得分之后还有一层轻量规则校正。它不是大规模硬编码，而是对明显工业逻辑做约束：
-
-```text
-bulk_score 高且语义为 bulk/static/uncertain
-  -> 增强 large_static_bulk
-
-micro_score 高且低置信或紧固件
-  -> 增强 micro_uncertain
-
-可靠 fastener 且不是 micro
-  -> 增强 repeated_fastener
-
-可靠 motion_or_precision
-  -> 增强 motion_precision 或 critical_preserve
-
-可靠 fluid_or_interface
-  -> 增强 interface_fluid
-
-可靠 structural_key
-  -> 增强 structural_control
-
-high_detail_score 高且不是 bulk
-  -> 增强 high_detail_shape
-```
-
-这层规则的作用是保证工程常识边界：
-
-- 大型板件不要因为面积大就被过保护。
-- 低置信小件不要轻易进入 P8-P10。
-- 齿轮、轴承、电机、弹簧等可靠识别时应优先保护。
-- 接口件和结构件要区分 P7/P8。
-
-## 10. 输出解释字段
-
-最终 CSV 不只输出 `lod_priority`，还输出可解释字段：
+再得到：
 
 ```text
 inferred_role
-function_role
 semantic_structural_score
-neural_role
-neural_role_score
-pointclip_role
-pointclip_role_score
 structural_match_role
 structural_match_score
-protected_features
-inference_reason
-structural_features
 ```
 
-这些字段用于排查：
+最终输出到 CSV，便于后续审查。
+
+## 8. 融合判断逻辑
+
+融合判断的基本原则是：
 
 ```text
-为什么某个 mesh 是 P8？
-是 PointNeXt 推动的，PointCLIP 推动的，还是结构特征推动的？
-它被保护的是轮廓、接触面、轴线、周期轮廓，还是接口边界？
+高置信 PointNeXt 不轻易推翻。
+低置信 PointNeXt 更多参考 PointCLIP 和结构特征。
+PointCLIP 只能作为开放语义补充，不能单独决定高保护策略。
+结构特征用于纠偏和约束最终策略。
 ```
 
-这比只输出类别 ID 更适合论文分析和工程调参。
-
-## 11. CSV 到 C++ 策略的转换
-
-C++ 侧在 `Scene::loadSemanticLodPolicies()` 中读取 CSV。
-
-查找顺序：
+典型修正：
 
 ```text
-优先：<model>_lod_constraints_fused.csv
-回退：<model>_lod_constraints.csv
+低置信 + 微小 + 形状简单
+  -> P1 micro_uncertain
+
+低置信 + 细长 / 环盘 / 重复标准件语义
+  -> P2 repeated_fastener
+
+大尺寸 + 低细节 + 板/块体
+  -> P3 large_static_bulk
+
+高面数 + 高复杂度 + 轮廓复杂
+  -> P6 high_detail_shape
+
+接口语义 + 环形/管状/紧凑结构
+  -> P7 interface_fluid
+
+结构连接语义 + 接触面/板状/夹具形态
+  -> P8 structural_control
+
+运动关键语义 + 轴线/环盘/高细节
+  -> P9 或 P10
 ```
 
-CSV 行被解析为 `SemanticLodPolicy`：
+这套逻辑避免两个极端：
+
+- 所有低置信件都变成 P1，导致重要小件被过度简化。
+- 所有复杂件都变成 P10，导致 LOD 失去性能收益。
+
+## 9. CSV 到 C++ 的转换
+
+融合后的 CSV 被 C++ 在加载 GLB 时读取：
 
 ```text
-mesh_index
-node_index
-lod_priority
-allow_cull
-confidence
-target_ratio_near
-target_ratio_mid
-target_ratio_far
-screen_error_weight
+src/scene/scene_semantic_lod.cpp
 ```
 
-同时维护两个层级：
-
-```text
-m_semanticNodePolicies:
-  node_index + mesh_index 级别策略。
-
-m_semanticMeshPolicies:
-  mesh_index 级别策略。
-  如果多个 node 复用同一个 mesh，则取更保守的合并策略。
-```
-
-合并策略原则：
-
-```text
-priority          取最大
-allowCull         逻辑 AND
-confidence        取最大
-targetRatio       取最大
-screenErrorWeight 取最大
-```
-
-也就是说，如果同一个 mesh 在不同 node 中出现，系统倾向于保守保护，而不是让任一实例过度简化。
-
-## 12. C++ 派生底层 LOD 参数
-
-Python 输出的是高层策略，C++ 会进一步派生底层 `clodConfig` 参数。
-
-核心派生表在 `derivePolicy()`：
-
-```text
-simplifyByPriority
-mergeByPriority
-featureByPriority
-protectByPriority
-criticalByPriority
-softByPriority
-lockByPriority
-decayByPriority
-minByPriority
-partitionByPriority
-```
-
-主要派生参数：
-
-| 参数 | 作用 |
-|---|---|
-| simplifyRatio | 控制整体简化目标 |
-| errorMergeScale | 控制误差合并尺度 |
-| featureWeightScale | 控制特征约束权重 |
-| featureProtectThreshold | 保护普通特征的阈值 |
-| featureCriticalThreshold | 保护关键特征的阈值 |
-| featureSoftScale | 软保护强度 |
-| featureHardLockRatio | 硬锁定顶点比例 |
-| hierarchyDepthDecay | 层级构建深度衰减 |
-| hierarchyMinRatio | 层级最小保留比例 |
-| partitionSize | cluster 分区粒度 |
-| lodErrorScale | 运行时 LOD 误差尺度 |
-
-策略趋势：
-
-```text
-P1-P3:
-  simplifyRatio 更低，feature 保护更弱，partition 更粗，允许快速降面。
-
-P4-P6:
-  中间约束，平衡可见外形和面数。
-
-P7-P10:
-  feature 权重更高，保护阈值更严格，hard lock 比例更高，层级衰减更慢。
-```
-
-## 13. 与 cluster LOD 构建的结合
-
-在 `Scene::buildGeometryLod()` 中：
+读取顺序：
 
 ```cpp
-clodConfig clodInfo = clodDefaultConfig(...);
-
-if(geometry.hasSemanticLodPolicy)
-{
-  applySemanticPolicyToConfig(clodInfo, geometry.semanticPolicy);
-}
+const std::string fusedCsvName = m_filePath.stem().string() + "_lod_constraints_fused.csv";
+const std::string csvName      = m_filePath.stem().string() + "_lod_constraints.csv";
 ```
 
-语义策略会影响：
+程序优先查找 fused，再查找普通 constraints。
+
+每行 CSV 转为：
+
+```text
+SemanticLodPolicy
+```
+
+核心字段包括：
+
+```text
+meshIndex
+nodeIndex
+priority
+allowCull
+confidence
+targetRatioNear
+targetRatioMid
+targetRatioFar
+screenErrorWeight
+rowHash
+```
+
+`rowHash` 和整体 fingerprint 会进入 cache 判断。如果 CSV 改变，旧 `.zippp` 会被视为不匹配，需要重建，避免使用过时 LOD。
+
+## 10. 对底层 LOD 构建的影响
+
+CSV 策略不会只停留在 UI 显示，而是会真正影响底层 `clodConfig`：
+
+```text
+src/scene/scene_semantic_lod.cpp
+Scene::applySemanticPolicyToConfig(...)
+```
+
+主要影响：
 
 ```text
 simplify_ratio
@@ -539,203 +408,180 @@ partition_size
 feature_attribute_weight
 feature_protect_threshold
 feature_critical_threshold
+simplify_regularize
 ```
 
-这说明当前策略不是只在前端染色，而是实际进入 LOD 构建算法，影响层级生成和特征保护。
+其中：
 
-## 14. 特征保护思想
+- `simplify_ratio` 控制目标简化比例。
+- `screenErrorWeight` 间接影响运行时 LOD 切换阈值。
+- `feature_soft_scale` 控制特征保护权重。
+- `feature_hard_lock_ratio` 控制关键特征硬锁比例。
+- `hierarchy_depth_decay` 和 `hierarchy_min_ratio` 影响层级构建深度。
+- `partition_size` 影响 cluster/group 构建粒度。
 
-底层 LOD 构建会统计 feature metrics：
+因此语义策略会进入两个层面：
 
 ```text
-boundary_vertices
-non_manifold_vertices
-sharp_edge_vertices
-boundary_components
-sharp_ring_components
-circular_hole_loops
-circular_hole_vertices
-functional_boundary_vertices
-cylindrical_vertices
-thin_wall_vertices
-protected_vertices
-critical_vertices
-feature_importance
+离线 LOD 构建阶段
+  -> 影响 mesh 简化、特征保护、层级构建。
+
+运行时渲染阶段
+  -> 影响 LOD 选择、屏幕误差权重、是否允许远处剔除。
 ```
 
-语义策略通过不同 P 级调整这些特征的保护强度：
+## 11. 与 meshoptimizer 的关系
+
+当前底层仍然基于 meshoptimizer / clustered LOD 的思想：
 
 ```text
-P1/P2:
-  特征保护弱，主要保留位置和粗轮廓。
-
-P3:
-  大型静态件快速简化，但仍保留外轮廓和主要开口。
-
-P6:
-  增强高曲率区域、特征边和复杂轮廓保护。
-
-P7/P8:
-  保护接口边界、装配面、接触面、控制件轮廓。
-
-P9/P10:
-  保护轴线、导向面、周期轮廓、接触面和关键功能区域。
+先构建 meshlet / cluster
+再进行 group partition
+再进行简化
+再生成层级 LOD
 ```
 
-这就是“语义与结构引导的特征保护”真正进入 LOD 算法的方式。
-
-## 15. cache 一致性设计
-
-语义策略参与 cache identity：
-
-```cpp
-geometry.lodInfo.semanticPolicyHash = semanticPolicyHashForMesh(meshIndex);
-```
-
-只要策略 CSV 改变，`semanticPolicyHash` 就改变。旧 `.zippp` cache 会被判定 stale，然后重新构建。
-
-这样避免了一个关键错误：
+语义结构策略不是替代 meshoptimizer，而是给它提供更高层的约束：
 
 ```text
-CSV 已更新，但项目仍然使用旧 cache 中的 LOD 数据。
+meshoptimizer 负责几何优化；
+语义结构策略负责告诉它哪些区域应该更激进，哪些区域应该更保守。
 ```
 
-当前代码还将重复的 cache mismatch 日志压缩为一次性提示，避免大模型刷屏。
+这种设计比较合理，因为：
 
-## 16. GPU 标志与可视化
+- 不破坏现有高性能 LOD 管线。
+- 不重新发明 mesh 简化算法。
+- 只在策略层和约束层增加工业语义。
+- 易于调参、可解释、可可视化。
 
-语义 LOD 标志写入 instance：
+## 12. 可视化和验证
+
+前端支持 `semantic lod policy` 可视化模式。颜色大致为：
 
 ```text
-SEMANTIC_LOD_VALID_BIT
-SEMANTIC_LOD_ALLOW_CULL_BIT
-SEMANTIC_LOD_AGGRESSIVE_BIT
-SEMANTIC_LOD_PRESERVE_BIT
-SEMANTIC_LOD_LOW_CONF_BIT
-priority bits
+P1  灰色
+P2  棕色
+P3  橙黄色
+P4  黄色
+P5  绿色
+P6  青绿色
+P7  浅蓝色
+P8  蓝色
+P9  紫色
+P10 粉红 / 红色
 ```
 
-shader 通过：
-
-```glsl
-semanticLodColor(instanceID)
-```
-
-根据 priority 显示 P1-P10 颜色。
-
-前端统计：
+验证时不应只看 FPS，而应同时看：
 
 ```text
-Semantic LOD Policy Distribution
+P1-P10 数量分布
+Enqueued Clusters
+Enqueued Triangles
+LOD pixel error
+模型近处和远处视觉质量
+关键结构是否破坏
+重复小件是否快速简化
 ```
 
-统计每个 P 级的：
+特别需要检查：
+
+- P8 是否过多，导致结构控制件保护偏保守。
+- P6 是否过多，导致复杂形状件保面过多。
+- P2 是否包含明显非紧固件。
+- P10 是否稳定，不能大规模膨胀。
+- P1 是否显著减少但没有吞掉重要小件。
+
+## 13. old 与 fused 的评估方法
+
+融合策略的效果不能只看单个 mesh 的类别是否变化，而应看整体 LOD 策略是否更符合工程目标。推荐从以下维度比较：
 
 ```text
-Instances
-Geometries
-Share
+1. 行数是否一致
+   old 和 fused 应能按 order + node_index + mesh_index 完整匹配。
+
+2. P1 是否合理减少
+   P1 是微小或不确定件。过多 P1 说明策略无法理解零件功能。
+
+3. P10 是否稳定
+   P10 是最高保护类，不应因为开放词表推断而大规模膨胀。
+
+4. P2 / P3 是否增加合理
+   重复紧固件和大型静态件应能更快简化，是性能收益的主要来源。
+
+5. P6 / P8 是否过度增长
+   高细节件和结构控制件过多会使策略偏保守。
+
+6. 变化是否集中在低置信样本
+   如果高置信 PointNeXt 样本大量被推翻，说明融合权重可能过强。
 ```
 
-这使得策略不只是离线数据，也能在前端直接验证。
+当前项目中，`a`、`b`、`c`、`o1778`、`o3049` 五个模型的 old 与 fused 对比可以作为基准观察：
 
-## 17. 技术优势
+| 模型 | mesh 数 | 变化比例 | 主要变化 |
+|---|---:|---:|---|
+| `a` | 24259 | 5.87% | 小幅修正，old 已较稳定 |
+| `b` | 63063 | 43.55% | P1 大幅减少，P2/P3/P6/P8 增加 |
+| `c` | 61467 | 48.36% | P1 大幅减少，复杂件和结构件被细分 |
+| `o1778` | 1778 | 50.39% | P1 从 523 降到 57，P10 基本稳定 |
+| `o3049` | 3049 | 100% | old 是旧 5 类策略，fused 升级为 P1-P10 |
+
+其中 `b`、`c`、`o1778` 的核心改进是减少 old 中过多的 `P1_micro_uncertain`。这说明 PointCLIP V2 和结构特征有效补足了低置信样本。
+
+`a` 的变化比例只有 5.87%，说明 old 已经相对稳定，fused 主要做小范围精修。`o3049` 显示 100% 变化，是因为 old 文件使用旧的五类策略命名，fused 则升级为 P1-P10 十类体系，不能简单理解为每个 mesh 都被错误改变。
+
+后续加入更多 GLB 后，应继续使用同样方法分析：
+
+```text
+*_lod_constraints_old.csv
+*_lod_constraints_fused.csv
+```
+
+重点不是追求变化越多越好，而是让变化集中在原先低置信、不确定、过粗分类的 mesh 上。
+
+## 14. 技术优势
 
 当前方案的优势在于：
 
-1. 多源证据融合  
-   不依赖单一神经网络结果，能处理低置信和开放类别。
+- 多证据融合，不依赖单一分类器。
+- P1-P10 策略可解释，可直接映射到底层 LOD 参数。
+- 保留 mesh 级输出，兼容原项目按 mesh 做 LOD 的流程。
+- fused 文件优先读取，不破坏旧的 `_lod_constraints.csv` 兼容逻辑。
+- cache fingerprint 包含语义策略变化，避免旧 cache 污染结果。
+- UI 可显示每类数量并用颜色检查策略合理性。
 
-2. 结构特征兜底  
-   即使语义不确定，也能通过尺寸、薄壁、细长、大体块、高细节等特征决定合理策略。
+## 15. 局限和后续优化
 
-3. 功能角色中间层  
-   先推断 role，再映射 P1-P10，减少类别名和 LOD 策略之间的硬耦合。
+当前仍有几个需要注意的点：
 
-4. 策略真正进入 LOD 构建  
-   不是只做可视化，而是影响 simplify ratio、feature constraints、hierarchy 参数和 partition size。
+1. PointCLIP V2 对 `structural_control` 可能偏保守。
+   如果 P8 面积过大，可以调低 PointCLIP 对 P8 的融合权重。
 
-5. 可解释性强  
-   输出 `inference_reason`、`protected_features`、`structural_features`，便于论文分析和工程调参。
+2. P6 可能在复杂模型中增长较多。
+   如果简化不够激进，可以降低 P6 的 `target_ratio_*` 或 `screen_error_weight`。
 
-6. cache 安全  
-   语义策略 hash 进入 cache identity，避免策略更新后误用旧 LOD 数据。
+3. 结构特征仍然是 mesh 局部判断。
+   如果需要更强的装配级理解，可以加入父子节点关系、重复实例模式、空间邻接关系。
 
-## 18. 当前局限
+4. 小件的 PointCLIP 投影可能不稳定。
+   对极小 mesh 应更多依赖尺寸、重复性和 PointNeXt 类别。
 
-仍然存在几个局限：
+5. Runtime / Cache Parameters 面板不应每帧重新统计大场景。
+   P1-P10 分布适合在加载后缓存，而不是每帧遍历所有 instance。
 
-1. PointCLIP V2 是弱证据  
-   开放词表分数常偏低，不能单独决定高保护策略。
+## 16. 结论
 
-2. 结构特征仍是统计级别  
-   当前可以判断薄壁、细长、圆盘、高细节、大体块，但没有真正解析螺纹、齿数、孔洞拓扑语义。
+当前语义结构 LOD 策略的核心不是“给模型贴标签”，而是把工业零件的功能语义转化为可执行的 LOD 约束。
 
-3. P6/P8 存在过保护风险  
-   低置信小件在 PointCLIP 和结构特征共同作用下可能被提升到 P6/P8，需要前端抽查。
-
-4. 尺度是模型内相对尺度  
-   对单模型有效，但跨模型统一物理尺度时仍需引入单位和真实尺寸阈值。
-
-5. role prototype 仍需数据驱动校准  
-   当前 expected_features 和 boost 规则是工程先验，后续可以用人工标注或 LOD 质量指标自动调参。
-
-## 19. 可继续优化方向
-
-推荐优先级：
-
-1. 增加真实结构检测  
-   识别圆孔、螺纹、齿轮齿形、轴孔、装配面、对称轴。
-
-2. 增加尺寸门槛  
-   对 P8/P10 加入最小尺寸或最小可见面积约束，减少小件过保护。
-
-3. 增加融合置信校准  
-   根据 PointCLIP top1/top2 margin、PointNeXt margin、结构匹配差距建立统一 uncertainty。
-
-4. 增加策略质量评估  
-   对比不同策略下三角形减少率、屏幕误差、关键特征保留率。
-
-5. 增加人工审查闭环  
-   将低置信、高冲突、高保护的小件输出为 review candidates，用人工反馈更新 role prior。
-
-## 20. 总结
-
-当前项目的 LOD 策略判断已经从传统几何误差驱动，升级为：
+它通过：
 
 ```text
-闭集监督语义
-  + 开放词表语义
-  + 结构几何特征
-  + 功能角色原型
-  + 底层 feature protection
-  + cache-aware LOD 构建
+PointNeXt 提供闭集工业类别先验；
+PointCLIP V2 提供开放词表语义补充；
+结构特征库提供几何形态约束；
+融合模块输出 P1-P10 策略；
+C++ 运行时把策略转成 clodConfig；
+底层 meshoptimizer / cluster LOD 根据约束构建层级。
 ```
 
-这使得系统能够针对工业模型中的不同零件类型采用差异化 LOD 策略：
-
-```text
-重复标准件快速简化
-大型静态体块快速降面
-普通可见结构适度保留
-接口/结构/运动/关键件重点保护
-```
-
-因此，该部分不仅是分类后处理，而是一个完整的“语义与结构引导的 LOD 约束决策层”。
-
-<<<<<<< HEAD
-| 颜色 | LOD 类别 | 含义 |
-|---|---|---|
-| 灰色 | P1 | `micro_uncertain`，微小/不确定件 |
-| 棕色 | P2 | `repeated_fastener`，螺栓、螺母、垫片、销钉等重复标准件 |
-| 橙黄色 | P3 | `large_static_bulk`，大型静态体块、地基、壳体、板件 |
-| 黄色 | P4 | `ordinary_low_detail`，普通低细节件 |
-| 绿色 | P5 | `balanced_visible`，普通可见结构件 |
-| 青绿色 | P6 | `high_detail_shape`，高细节形状件 |
-| 浅蓝色 | P7 | `interface_fluid`，接口、阀、喷嘴、管接头 |
-| 蓝色 | P8 | `structural_control`，结构连接件、夹具、控制件、把手 |
-| 紫色 | P9 | `motion_precision`，运动/精密导向件 |
-| 粉红/玫红色 | P10 | `critical_preserve`，齿轮、轴承、电机、弹簧等关键件 |
-| 深灰色 | 无语义 LOD | 没有加载到有效 semantic policy |
-=======
->>>>>>> fc11f2f54ca7dd48635dacfcfec54a9c061e8984
+这种方法保留了原 LOD 系统的高性能基础，同时引入了工业模型所需的结构感知能力。对于螺栓、地基、运动件、结构控制件和关键传动件，它能给出不同的简化策略，从而在性能和视觉/功能保真之间取得更合理的平衡。

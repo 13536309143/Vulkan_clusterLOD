@@ -16,16 +16,13 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_MODELS = ["a.glb", "b.glb", "c.glb", "o1778.glb", "o3049.glb"]
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Batch analyze GLB files for LOD constraints.")
     parser.add_argument(
         "--resources-dir",
         type=Path,
         required=True,
-        help="Directory containing a.glb, b.glb, c.glb, o1778.glb, o3049.glb.",
+        help="Directory containing GLB files.",
     )
     parser.add_argument(
         "--output-dir",
@@ -37,7 +34,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cfg", type=Path, required=True)
     parser.add_argument("--ckpt", type=Path, required=True)
     parser.add_argument("--classes-file", type=Path, required=True)
-    parser.add_argument("--models", nargs="*", default=DEFAULT_MODELS)
+    parser.add_argument(
+        "--models",
+        nargs="*",
+        default=None,
+        help="Optional explicit GLB file list. If omitted, all *.glb files under --resources-dir are processed.",
+    )
     parser.add_argument("--num-points", type=int, default=8192)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
@@ -66,9 +68,14 @@ def main() -> None:
     script_dir = Path(__file__).resolve().parent
     analyze_script = script_dir / "analyze_large_glb_parts_pointnext.py"
     lod_script = script_dir / "build_lod_constraints_from_analysis.py"
+    models = args.models
+    if models is None:
+        models = sorted(path.name for path in resources_dir.glob("*.glb") if path.is_file())
+        if not models:
+            raise FileNotFoundError(f"No .glb files found in {resources_dir}")
 
     missing = []
-    for name in args.models:
+    for name in models:
         path = resources_dir / name
         if not path.exists():
             missing.append(str(path))
@@ -77,7 +84,11 @@ def main() -> None:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for name in args.models:
+    print("Models:")
+    for name in models:
+        print(f"  {name}")
+
+    for name in models:
         glb_path = resources_dir / name
         stem = model_stem(glb_path)
         analysis_csv = output_dir / f"{stem}_pointnext_analysis.csv"

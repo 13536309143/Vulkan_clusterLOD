@@ -17,6 +17,8 @@
 - 支持 Hi-Z、视锥/遮挡剔除、two-pass culling 等遍历优化。
 - 支持可选 GPU radix sort，对实例 sort key/value 做排序。
 - 提供 ImGui / ImPlot 调试界面，用于调节渲染、LOD、streaming、压缩、cache 和统计参数。
+- 支持语义结构感知 LOD：PointNeXt、PointCLIP V2 与几何结构特征融合生成 P1-P10 LOD 策略。
+- 支持自动读取 `lod_analysis_outputs/<模型名>_lod_constraints_fused.csv`，并在 scene cache 中绑定语义策略指纹。
 
 ## 目录结构
 
@@ -174,6 +176,64 @@ cmake -S . -B build -DNVPROCORE2_DOWNLOAD=OFF
 .\build\Release\t1.exe --validation 1
 ```
 
+## 语义结构 LOD
+
+项目根目录提供了一键全量分析脚本：
+
+```bat
+run_all_glb_pointnext_pointclipv2_fused.bat
+```
+
+该脚本会扫描：
+
+```text
+_downloaded_resources\*.glb
+```
+
+并按顺序执行：
+
+```text
+1. conda activate gpt-pointnext
+   PointNeXt 闭集分类 + 几何结构特征提取
+   -> lod_analysis_outputs\<模型名>_pointnext_analysis.csv
+
+2. conda activate PointCLIPV2_LOD
+   PointCLIP V2 开放词表 zero-shot 推断
+   -> lod_analysis_outputs\<模型名>_pointclipv2_zeroshot.csv
+
+3. 融合 PointNeXt、PointCLIP V2 和结构特征
+   -> lod_analysis_outputs\<模型名>_lod_constraints_fused.csv
+```
+
+如果环境名不同，可以在运行前覆盖：
+
+```bat
+set POINTNEXT_CONDA_ENV=你的PointNeXt环境
+set POINTCLIP_CONDA_ENV=你的PointCLIP环境
+run_all_glb_pointnext_pointclipv2_fused.bat
+```
+
+生成 fused 策略后，删除旧 cache 让程序重新构建：
+
+```bat
+del /f /q _downloaded_resources\*.glb.zippp
+del /f /q _downloaded_resources\*.glb.zippp_partial
+```
+
+C++ 加载模型时会优先查找：
+
+```text
+lod_analysis_outputs\<模型名>_lod_constraints_fused.csv
+```
+
+找不到 fused 时才回退到：
+
+```text
+lod_analysis_outputs\<模型名>_lod_constraints.csv
+```
+
+前端可在 visualization 中选择 `semantic lod policy`，查看 P1-P10 策略颜色和数量分布。
+
 ## 常用参数
 
 基础：
@@ -319,6 +379,8 @@ shader 文件在运行时通过 `nvvkglsl::GlslCompiler` 和 shaderc 编译。�
 
 ## 相关文档
 
+- [POINTNEXT_POINTCLIPV2_SEMANTIC_LOD_FULL_WORKFLOW.md](POINTNEXT_POINTCLIPV2_SEMANTIC_LOD_FULL_WORKFLOW.md)：PointNeXt + PointCLIP V2 + fused 策略的完整执行流程。
+- [SEMANTIC_LOD_STRATEGY_TECHNICAL_ANALYSIS.md](SEMANTIC_LOD_STRATEGY_TECHNICAL_ANALYSIS.md)：语义与结构感知 LOD 策略判断的关键技术点。
 - [docs/external-libraries-analysis.md](docs/external-libraries-analysis.md)：外部库功能使用分析。
 - [docs/src-shaders-reference.md](docs/src-shaders-reference.md)：源码和 shader 文件职责说明。
 - [docs/key-functions-blog.md](docs/key-functions-blog.md)：从关键函数视角理解项目主流程。
