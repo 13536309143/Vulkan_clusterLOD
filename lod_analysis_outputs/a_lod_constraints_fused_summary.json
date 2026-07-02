@@ -1,3 +1,159 @@
+<<<<<<< HEAD
 version https://git-lfs.github.com/spec/v1
 oid sha256:aba227ebf9803b8fc7848b19b6a2da6c9e198522be8101271630fef8fe9a0a03
 size 4693
+=======
+{
+  "num_rows": 24259,
+  "thresholds": {
+    "diag_p10": 0.014999451556272518,
+    "diag_p25": 0.025764926183936453,
+    "diag_p50": 0.0629580929358667,
+    "diag_p75": 0.11233034043691029,
+    "diag_p90": 0.28080485645293196,
+    "diag_p97": 0.7847276774164011,
+    "face_p50": 296,
+    "face_p75": 1852,
+    "face_p90": 3990,
+    "face_p97": 13702,
+    "area_p50": 0.0020507918670773506,
+    "area_p75": 0.006200027652084827,
+    "area_p90": 0.05648115277290344
+  },
+  "size_class_counts": {
+    "S5_xlarge": 1708,
+    "S6_huge": 717,
+    "S4_large": 3368,
+    "S3_medium": 6334,
+    "S2_small": 5839,
+    "S0_micro": 2503,
+    "S1_tiny": 3790
+  },
+  "detail_class_counts": {
+    "D1_low": 14505,
+    "D0_very_low": 3629,
+    "D2_medium": 2716,
+    "D4_very_high": 1126,
+    "D3_high": 2283
+  },
+  "confidence_class_counts": {
+    "C2_high": 12007,
+    "C0_low_or_ambiguous": 4620,
+    "C1_medium": 7632
+  },
+  "semantic_group_counts": {
+    "fastener_repeated": 7678,
+    "semantic_uncertain": 2165,
+    "control_or_handle": 1020,
+    "motion_or_precision_part": 1315,
+    "structural_key_part": 6994,
+    "fluid_or_interface_part": 1504,
+    "bulk_static_part": 1128,
+    "semantic_uncertain:geom_high_detail_irregular": 116,
+    "semantic_uncertain:geom_compact_block": 930,
+    "semantic_uncertain:geom_simple_irregular": 365,
+    "semantic_uncertain:geom_slender_bar": 379,
+    "semantic_uncertain:geom_ring_or_disk": 91,
+    "semantic_uncertain:geom_thin_plate": 502,
+    "semantic_uncertain:geom_ultra_thin_sheet": 72
+  },
+  "geometry_fallback_counts": {
+    "geom_thin_plate": 5788,
+    "geom_simple_irregular": 3125,
+    "geom_wire_or_rod": 183,
+    "geom_ring_or_disk": 966,
+    "geom_compact_block": 10956,
+    "geom_slender_bar": 1366,
+    "geom_high_detail_irregular": 841,
+    "geom_ultra_thin_sheet": 1034
+  },
+  "inferred_role_counts": {
+    "repeated_fastener": 7919,
+    "large_static_bulk": 634,
+    "structural_control": 8142,
+    "high_detail_shape": 2108,
+    "critical_preserve": 1306,
+    "ordinary_low_detail": 1960,
+    "interface_fluid": 1504,
+    "motion_precision": 9,
+    "micro_uncertain": 566,
+    "balanced_visible": 111
+  },
+  "function_role_counts": {
+    "fastening_or_repeated_standard_part": 7919,
+    "large_static_support_or_cover": 634,
+    "structural_connector_or_control_surface": 8142,
+    "high_detail_visible_shape": 2108,
+    "critical_motion_or_transmission_part": 1306,
+    "ordinary_low_detail_part": 1960,
+    "interface_or_fluid_connection": 1504,
+    "motion_or_precision_guidance": 9,
+    "low_confidence_or_micro_detail": 566,
+    "balanced_visible_structure": 111
+  },
+  "neural_role_counts": {
+    "repeated_fastener": 8877,
+    "structural_control": 10253,
+    "critical_preserve": 1957,
+    "interface_fluid": 1656,
+    "motion_precision": 16,
+    "large_static_bulk": 1500
+  },
+  "pointclip_role_counts": {
+    "repeated_fastener": 8847,
+    "structural_control": 13413,
+    "ordinary_low_detail": 1228,
+    "large_static_bulk": 771
+  },
+  "structural_match_role_counts": {
+    "ordinary_low_detail": 16504,
+    "large_static_bulk": 666,
+    "high_detail_shape": 4336,
+    "balanced_visible": 2524,
+    "micro_uncertain": 134,
+    "interface_fluid": 81,
+    "critical_preserve": 13,
+    "structural_control": 1
+  },
+  "lod_priority_counts": {
+    "P2_repeated_fastener": 7919,
+    "P3_large_static_bulk": 634,
+    "P8_structural_control": 8142,
+    "P6_high_detail_shape": 2108,
+    "P10_critical_preserve": 1306,
+    "P4_ordinary_low_detail": 1960,
+    "P7_interface_fluid": 1504,
+    "P9_motion_precision": 9,
+    "P1_micro_uncertain": 566,
+    "P5_balanced_visible": 111
+  },
+  "lod_strategy_counts": {
+    "repeated_fastener_aggressive": 7919,
+    "large_static_bulk_fast_simplify": 634,
+    "structural_control_protect": 8142,
+    "high_detail_shape": 2108,
+    "critical_preserve": 1306,
+    "ordinary_low_detail_fast_simplify": 1960,
+    "interface_or_fluid_connection": 1504,
+    "motion_precision_protect": 9,
+    "micro_uncertain_cull_far": 566,
+    "balanced_visible_part": 111
+  },
+  "predicted_class_counts": {
+    "pins_rivets_keys": 1622,
+    "handles_controls": 1726,
+    "bearings_bushings_guides": 1181,
+    "motors_gearmotors": 308,
+    "pipe_fittings_valves_nozzles": 1656,
+    "screws_bolts_studs": 2969,
+    "joints_clamps_structural_connectors": 8527,
+    "springs": 270,
+    "gears_pulleys_chains": 9,
+    "wheels_castors": 16,
+    "rotating_fluid_machinery": 189,
+    "plates_discs_shapes": 1500,
+    "washers_rings_spacers": 3760,
+    "nuts": 526
+  }
+}
+>>>>>>> fc11f2f54ca7dd48635dacfcfec54a9c061e8984

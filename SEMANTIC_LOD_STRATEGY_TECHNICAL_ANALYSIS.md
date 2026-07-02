@@ -723,6 +723,7 @@ Share
 
 因此，该部分不仅是分类后处理，而是一个完整的“语义与结构引导的 LOD 约束决策层”。
 
+<<<<<<< HEAD
 | 颜色 | LOD 类别 | 含义 |
 |---|---|---|
 | 灰色 | P1 | `micro_uncertain`，微小/不确定件 |
@@ -736,3 +737,5 @@ Share
 | 紫色 | P9 | `motion_precision`，运动/精密导向件 |
 | 粉红/玫红色 | P10 | `critical_preserve`，齿轮、轴承、电机、弹簧等关键件 |
 | 深灰色 | 无语义 LOD | 没有加载到有效 semantic policy |
+=======
+>>>>>>> fc11f2f54ca7dd48635dacfcfec54a9c061e8984

@@ -1,3 +1,15 @@
+<<<<<<< HEAD
 version https://git-lfs.github.com/spec/v1
 oid sha256:1926ab395c6ce9b4496296f7b6e46f5c1b2de5560ff8b1148f7c3d6251eaee95
 size 597
+=======
+﻿pointclip_top1_id,pointclip_top1_role,count,avg_score,role_total
+joint_clamp_hinge,structural_control,8923,0.16567071037523337,13413
+pin_rivet_key,repeated_fastener,5159,0.19784300589335013,8847
+handle_lever_knob,structural_control,4490,0.19154625856265725,13413
+washer_spacer_ring,repeated_fastener,2818,0.27263858909351846,8847
+ordinary_irregular_part,ordinary_low_detail,1228,0.1506298888256282,1228
+nut,repeated_fastener,870,0.1543364426699178,8847
+plate_disc_panel,large_static_bulk,550,0.14773298371921886,771
+large_foundation_frame,large_static_bulk,221,0.14969680063864765,771
+>>>>>>> fc11f2f54ca7dd48635dacfcfec54a9c061e8984
