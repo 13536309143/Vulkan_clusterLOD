@@ -1,386 +1,155 @@
 # Vulkan Cluster LOD Renderer
 
-这是一个基于 Vulkan 的 Cluster LOD 渲染实验项目。项目从 `.gltf` / `.glb` 模型导入几何数据，在 CPU 侧构建 cluster、group 和多级 LOD 层次结构，然后在 GPU 侧通过 compute shader、mesh shader、Hi-Z 和可选 streaming 完成遍历、剔除、排序与渲染。
+这是一个基于 Vulkan 的 Cluster LOD 渲染与实验项目。项目从 `.glb` / `.gltf` 模型导入几何数据，在 CPU 侧构建 mesh cluster、group 和多级 LOD 层次结构，在 GPU 侧通过 compute shader、mesh shader、Hi-Z、streaming 和 cache 完成实时渲染。
 
-项目目标不是做通用模型查看器，而是验证和调试大规模几何场景的 Cluster LOD 数据组织、运行时遍历、可见性剔除、显存驻留和流式加载策略。
+当前版本在原有 meshoptimizer / Cluster LOD 管线基础上，加入了工业模型的语义结构感知 LOD 策略：
 
-## 功能概览
+- PointNeXt 负责工业零件闭集分类。
+- PointCLIP V2 负责开放词表 zero-shot 语义补充。
+- 几何结构特征负责尺寸、形状、复杂度和关键结构判断。
+- 融合模块输出 P1-P10 语义 LOD 策略。
+- C++ LOD 构建阶段读取 fused CSV，并将策略转为保守的语义结构约束。
 
-- glTF / GLB 场景导入，支持读取 mesh、node、material、camera 和实例层级。
-- 支持 `EXT_meshopt_compression` 数据解压。
-- CPU 侧构建 cluster / group / LOD hierarchy。
-- 基于 meshoptimizer 的 meshlet 切分、cluster 分区、属性感知简化和 bounds 计算。
-- 支持 scene cache，避免每次启动重复做离线 LOD 构建。
-- 支持 processing-only 模式，用于提前生成 cache。
-- 支持 preload 和 streaming 两种几何驻留模式。
-- 支持 Vulkan mesh shader 渲染路径，优先使用 EXT mesh shader，也可使用 NV mesh shader 路径。
-- 支持 Hi-Z、视锥/遮挡剔除、two-pass culling 等遍历优化。
-- 支持可选 GPU radix sort，对实例 sort key/value 做排序。
-- 提供 ImGui / ImPlot 调试界面，用于调节渲染、LOD、streaming、压缩、cache 和统计参数。
-- 支持语义结构感知 LOD：PointNeXt、PointCLIP V2 与几何结构特征融合生成 P1-P10 LOD 策略。
-- 支持自动读取 `lod_analysis_outputs/<模型名>_lod_constraints_fused.csv`，并在 scene cache 中绑定语义策略指纹。
+当前策略不是用语义分类替代原 LOD 算法，而是在保留原始高性能 LOD 管线的前提下，让不同类型的工业子零件采用不同的简化约束。
 
 ## 目录结构
 
 ```text
-.
-+-- CMakeLists.txt
-+-- cmake/
-|   +-- FindNvproCore2.cmake
-+-- docs/
-|   +-- external-libraries-analysis.md
-|   +-- key-functions-blog.md
-|   +-- src-shaders-reference.md
-+-- shaders/
-|   +-- build/
-|   +-- common/
-|   +-- debug/
-|   +-- interface/
-|   +-- post/
-|   +-- render/
-|   +-- streaming/
-|   +-- traversal/
-+-- src/
-|   +-- app/
-|   +-- core/
-|   +-- meshlod/
-|   +-- renderer/
-|   +-- scene/
-|   +-- streaming/
-|   +-- vendor/
-+-- thirdparty/
-    +-- vulkan_radix_sort/
+src/
+  app/                 ImGui 前端、运行参数、可视化模式
+  core/                cache、序列化、基础工具
+  meshlod/             meshoptimizer 与层级 LOD 构建核心
+  renderer/            Vulkan 渲染、Hi-Z、streaming、cluster traversal
+  scene/               glTF/GLB 导入、语义 CSV 读取、几何预处理
+
+tools/
+  pointnext_lod/       PointNeXt GLB 分析、结构特征提取、LOD 策略生成
+  pointclipv2/         PointCLIP V2 zero-shot 推断与融合脚本
+
+lod_analysis_outputs/  推断输出目录
+_downloaded_resources/ 待分析和加载的 GLB 模型
 ```
 
-主要模块：
+## 核心能力
 
-- `src/app`：应用入口、参数注册、生命周期、UI、场景加载和每帧调度。
-- `src/core`：cache 序列化和文件映射相关逻辑。
-- `src/scene`：glTF 导入、几何预处理、cluster LOD 构建、压缩和场景实例化。
-- `src/meshlod`：基于 meshoptimizer 的 LOD 构建核心逻辑。
-- `src/renderer`：Vulkan 资源、framebuffer、Hi-Z、preload renderer 和 Cluster LOD renderer。
-- `src/streaming`：几何流式加载、驻留管理、传输任务和 streaming shader 管线。
-- `shaders/interface`：CPU/GPU 共享结构定义。
-- `shaders/render`、`shaders/traversal`、`shaders/streaming`、`shaders/post`：主要 GPU 侧逻辑。
+- 基于 meshoptimizer 的多级 LOD 构建。
+- Cluster / group 层级组织。
+- GPU 侧 LOD traversal、剔除、排序和渲染。
+- scene cache，避免每次启动重复预处理。
+- semantic lod policy 可视化模式，显示 P1-P10 策略分布。
+- 优先读取 `lod_analysis_outputs/<模型名>_lod_constraints_fused.csv`。
+- 支持语义结构约束进入 LOD 构建，但采用保守前置策略，避免过度保护。
 
-## 外部依赖
+## 语义结构 LOD 流程
 
-项目使用 CMake 构建，核心依赖由 `nvpro_core2` 提供。`cmake/FindNvproCore2.cmake` 会优先查找本地 `nvpro_core2`，找不到时默认下载固定提交：
+对新模型的完整流程是：
 
 ```text
-03297bee1f997208951cc104abb5ecc3e1f987ed
+GLB 模型
+  -> PointNeXt 闭集分类
+  -> PointCLIP V2 开放词表推断
+  -> 几何结构特征提取
+  -> 融合生成 P1-P10 策略
+  -> C++ 自动读取 fused CSV
+  -> 构建语义结构感知 LOD cache
+  -> 前端可视化与渲染
 ```
 
-主要依赖：
-
-- Vulkan SDK `>= 1.4.309.0`
-- CMake `>= 3.22`
-- C++20 编译器
-- Git
-- nvpro2：`nvapp`、`nvgui`、`nvutils`、`nvvk`、`nvvkglsl`
-- meshoptimizer
-- cgltf
-- GLM
-- ImGui / ImPlot
-- shaderc
-- volk
-- Vulkan Memory Allocator
-- `thirdparty/vulkan_radix_sort`
-
-项目明确关闭了 nvpro2 的部分可选模块：
-
-```cmake
-NVPRO2_ENABLE_nvgl OFF
-NVPRO2_ENABLE_nvgpu_monitor OFF
-NVPRO2_ENABLE_nvslang OFF
-NVPRO2_ENABLE_nvvkgltf OFF
-```
-
-因此 glTF 导入走项目自己的 `cgltf + meshoptimizer` 路径，而不是 `nvvkgltf`。
-
-更完整的外部库使用分析见 [docs/external-libraries-analysis.md](docs/external-libraries-analysis.md)。
-
-## 构建
-
-在 Windows + Visual Studio 环境中，可以使用：
-
-```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
-```
-
-也可以使用 Ninja：
-
-```powershell
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-```
-
-当前 CMake target 名来自目录名。因此在当前路径 `t1` 下，生成的可执行目标通常叫 `t1`。
-
-如果不想让 CMake 自动下载 nvpro2，可以提前把 `nvpro_core2` 放在以下任一路径：
-
-- `build/_deps/nvpro_core2`
-- 当前项目目录下的 `nvpro_core2`
-- 当前项目上级或上上级目录下的 `nvpro_core2`
-
-也可以通过 CMake cache 覆盖：
-
-```powershell
-cmake -S . -B build -DNVPROCORE2_DOWNLOAD=OFF
-```
-
-## 运行
-
-构建后从生成目录运行可执行文件。项目默认会尝试在运行目录、源码资源目录或复制到 runtime 的资源目录里查找 `a.glb`。
-
-指定模型：
-
-```powershell
-.\build\Release\t1.exe --scene path\to\model.glb
-```
-
-加载配置文件：
-
-```powershell
-.\build\Release\t1.exe --scene path\to\scene.cfg
-```
-
-只生成 cache，不打开窗口：
-
-```powershell
-.\build\Release\t1.exe --scene path\to\model.glb --processingonly 1
-```
-
-允许 processing-only 断点续跑：
-
-```powershell
-.\build\Release\t1.exe --scene path\to\model.glb --processingonly 1 --processingpartial 1
-```
-
-启用 streaming：
-
-```powershell
-.\build\Release\t1.exe --scene path\to\model.glb --streaming 1
-```
-
-指定 GPU：
-
-```powershell
-.\build\Release\t1.exe --device 0
-```
-
-启用 validation：
-
-```powershell
-.\build\Release\t1.exe --validation 1
-```
-
-## 语义结构 LOD
-
-项目根目录提供了一键全量分析脚本：
+如果 `_downloaded_resources` 下有多个 GLB，可以直接运行：
 
 ```bat
 run_all_glb_pointnext_pointclipv2_fused.bat
 ```
 
-该脚本会扫描：
-
-```text
-_downloaded_resources\*.glb
-```
-
-并按顺序执行：
-
-```text
-1. conda activate gpt-pointnext
-   PointNeXt 闭集分类 + 几何结构特征提取
-   -> lod_analysis_outputs\<模型名>_pointnext_analysis.csv
-
-2. conda activate PointCLIPV2_LOD
-   PointCLIP V2 开放词表 zero-shot 推断
-   -> lod_analysis_outputs\<模型名>_pointclipv2_zeroshot.csv
-
-3. 融合 PointNeXt、PointCLIP V2 和结构特征
-   -> lod_analysis_outputs\<模型名>_lod_constraints_fused.csv
-```
-
-如果环境名不同，可以在运行前覆盖：
+默认环境：
 
 ```bat
-set POINTNEXT_CONDA_ENV=你的PointNeXt环境
-set POINTCLIP_CONDA_ENV=你的PointCLIP环境
-run_all_glb_pointnext_pointclipv2_fused.bat
+PointNeXt:    gpt-pointnext
+PointCLIP V2: PointCLIPV2_LOD
 ```
 
-生成 fused 策略后，删除旧 cache 让程序重新构建：
-
-```bat
-del /f /q _downloaded_resources\*.glb.zippp
-del /f /q _downloaded_resources\*.glb.zippp_partial
-```
-
-C++ 加载模型时会优先查找：
+脚本会扫描：
 
 ```text
-lod_analysis_outputs\<模型名>_lod_constraints_fused.csv
+_downloaded_resources/*.glb
 ```
 
-找不到 fused 时才回退到：
+并生成：
 
 ```text
-lod_analysis_outputs\<模型名>_lod_constraints.csv
+lod_analysis_outputs/<模型名>_pointnext_analysis.csv
+lod_analysis_outputs/<模型名>_pointclipv2_zeroshot.csv
+lod_analysis_outputs/<模型名>_pointnext_pointclip_merged.csv
+lod_analysis_outputs/<模型名>_lod_constraints_fused.csv
+lod_analysis_outputs/<模型名>_lod_constraints_fused_summary.json
 ```
 
-前端可在 visualization 中选择 `semantic lod policy`，查看 P1-P10 策略颜色和数量分布。
+## P1-P10 策略
 
-## 常用参数
+| 策略 | 含义 | LOD 倾向 |
+|---|---|---|
+| P1 | 微小或低置信零件 | 最激进，可远处快速简化或剔除 |
+| P2 | 重复紧固件 | 激进简化，保留基本外形 |
+| P3 | 大型静态块体 | 快速降低面数，避免大体量占预算 |
+| P4 | 普通低细节零件 | 偏性能 |
+| P5 | 一般可见件 | 平衡质量和性能 |
+| P6 | 高细节外形件 | 适度保护轮廓 |
+| P7 | 接口、流体、管路相关件 | 保护孔、接口和边界 |
+| P8 | 结构控制件 | 保护连接面和控制轮廓 |
+| P9 | 运动精密件 | 保护轴线、孔和关键形状 |
+| P10 | 关键保留件 | 最高保护，但仍保守进入底层代价 |
 
-基础：
+P1-P10 首先影响外层 LOD 参数，例如目标简化比例、LOD error、feature 权重和是否允许远处剔除。当前版本还会把策略以弱约束形式传入底层简化前的 feature importance 计算。
 
-- `--scene`：加载 `.gltf`、`.glb` 或 `.cfg`。
-- `--renderer`：选择 renderer 类型。
-- `--verbose`：输出更多日志。
-- `--debugui`：显示 Debug 面板。
-- `--vsync`：启用或关闭 VSync。
-- `--device`：按 index 强制选择 Vulkan 设备。
-- `--headless`：无窗口运行。
-- `--headlessframes`：headless 模式运行帧数。
-- `--dumpspirv`：把编译后的 SPIR-V 输出到工作目录。
+## 当前语义结构约束原则
 
-场景和 LOD：
-
-- `--clusterconfig`：选择 cluster preset。
-- `--clustergroupsize`：设置每组 cluster 数量。
-- `--loderror`：设置屏幕空间 LOD pixel error。
-- `--lodnodewidth`：设置 LOD hierarchy node width。
-- `--loddecimationfactor`：设置 LOD 递减系数。
-- `--meshoptfillweight`：传给 meshoptimizer cluster 构建的 fill weight。
-- `--simplifyuvweight`：UV 在属性感知简化中的权重。
-- `--simplifynormalweight`：normal 在属性感知简化中的权重。
-- `--simplifytangentweight`：tangent 在属性感知简化中的权重。
-- `--simplifytangentsignweight`：tangent sign 在属性感知简化中的权重。
-- `--learnedimportance`：是否启用轻量 MLP per-vertex learned importance，`1` 启用，`0` 关闭。
-- `--learnedstrength`：MLP importance 输出强度，数值越高，特征区域越保守。
-- `--learnedprotect`：高置信 importance 顶点硬保护阈值。
-- `--learnedtargetboost`：高 importance 区域的目标三角形保留增量。
-- `--learnederrorscale`：高 importance 区域的 LOD error 放大系数。
-- `--learnedtopologyedges`：用于精确边界/非流形描述符的单 geometry 有向边数量上限，`0` 表示不限制。
-
-cache 和预处理：
-
-- `--autosavecache`：加载后自动保存 cache。
-- `--autoloadcache`：启动时自动加载已有 cache。
-- `--mappedcache`：使用 memory mapped cache。
-- `--processingonly`：只处理并保存 cache，随后退出。
-- `--processingpartial`：processing-only 模式下允许部分保存和续跑。
-- `--processingmode`：控制外层/内层并行策略，`0` 自动，`-1` inner，`1` outer。
-- `--processingthreadpct`：初始加载和处理时使用的线程比例。
-- `--forcepreprocessmegabytes`：超过指定规模时要求先预处理。
-- `--cachesuffix`：cache 文件后缀，默认 `.zippp`。
-
-压缩：
-
-- `--compressed`：启用项目内部 group 数据压缩。
-- `--compressedpositionbits`：position mantissa drop bits。
-- `--compressedtexcoordbits`：texcoord mantissa drop bits。
-
-渲染和剔除：
-
-- `--visualize`：选择可视化模式。
-- `--culling`：启用视锥和遮挡剔除。
-- `--twopassculling`：启用 two-pass culling。
-- `--adaptivetwopassculling`：仅在场景规模和相机变化达到阈值时运行第二阶段剔除。
-- `--twopassminclusters`：adaptive two-pass 的最小场景 cluster 数阈值。
-- `--twopassmatrixdelta`：adaptive two-pass 的 culling 矩阵变化阈值。
-- `--forcedinvisculling`：强制 invisible culling。
-- `--separategroups`：使用 separate groups kernel。
-- `--instancesorting`：启用 instance sorting。
-- `--renderstats`：启用渲染统计。
-- `--extmeshshader`：使用 EXT mesh shader 路径。
-- `--facetshading`：启用 facet shading。
-- `--flipwinding`：翻转 winding。
-- `--forcetwosided`：强制双面。
-
-streaming：
-
-- `--streaming`：启用 streaming。
-- `--maxtransfermegabytes`：每帧 transfer buffer 预算。
-- `--maxgeomegabytes`：几何数据预算。
-- `--maxresidentgroups`：最大驻留 group 数。
-- `--maxframeloadrequests`：每帧最大加载请求数。
-- `--maxframeunloadrequests`：每帧最大卸载请求数。
-
-相机和光照：
-
-- `--camerastring`：从字符串恢复相机。
-- `--cameraspeed`：设置相机移动速度。
-- `--sundirection`：设置太阳方向。
-- `--suncolor`：设置太阳颜色。
-- `--shadowray`：启用或关闭 shadow ray。
-
-## 数据流程
+当前实现采用“外层策略为主，底层代价为辅”：
 
 ```text
-glTF / GLB / cache
-  -> Scene::init
-  -> cgltf 解析场景结构
-  -> meshoptimizer 解压 EXT_meshopt_compression
-  -> 顶点读取、量化、去重和 remap
-  -> meshoptimizer / meshlod 构建 cluster、group 和 LOD
-  -> Scene cache 保存或加载
-  -> RenderScene 选择 preload 或 streaming
-  -> Resources 创建 Vulkan buffer、image、descriptor 和 pipeline
-  -> renderer 执行 traversal、culling、Hi-Z、sorting 和 mesh shader render
-  -> ImGui / ImPlot 显示 viewport、设置和统计
+主控制：P1-P10 target ratio / error scale / feature weight
+辅助控制：保守调整边界、孔、圆柱轴、薄壁、功能边界的重要度
 ```
 
-## Shader
+这样做的原因是 GLB 工业模型通常有大量拆分 mesh 和导出边界。如果语义约束过强，很多非功能性边界会被误保护，导致简化率下降、LOD 效果变差。当前版本对底层代价做了三层限制：
 
-shader 文件在运行时通过 `nvvkglsl::GlslCompiler` 和 shaderc 编译。编译时会根据 renderer、streaming、mesh shader 类型、subgroup size、cluster 大小等配置注入宏。
+- 低置信度自动降低语义代价影响。
+- 每个顶点的语义 importance boost 有上限。
+- 只有 P7-P10 会触发更强的功能边界/薄壁锁定候选。
 
-主要 shader 目录：
+对应核心代码：
 
-- `shaders/interface`：CPU/GPU 共享结构和 binding 定义。
-- `shaders/common`：剔除、Hi-Z、属性编码等公共逻辑。
-- `shaders/render`：mesh shader 渲染和 fragment shading。
-- `shaders/traversal`：LOD traversal、presort、init、run。
-- `shaders/streaming`：streaming setup、update scene、age filter。
-- `shaders/build`：scene build setup。
-- `shaders/post`：fullscreen、background、atomic raster、Hi-Z。
-- `shaders/debug`：instance / cluster bbox debug rendering。
+```text
+src/scene/scene_semantic_lod.cpp
+src/meshlod/meshlod_simplify.h
+src/scene/clusterlod.cpp
+```
 
-源码和 shader 文件说明见 [docs/src-shaders-reference.md](docs/src-shaders-reference.md)。
+## 前端查看
 
-## UI 使用
+打开程序后，在 visualization 中选择：
 
-运行程序后主要面板包括：
+```text
+semantic lod policy
+```
 
-- `Viewport`：显示渲染结果。
-- `Settings`：渲染、LOD、cluster、streaming 和压缩参数。
-- `Misc Settings`：相机、光照和高级参数。
-- `Statistics`：scene、traversal、memory 和 cluster 统计。
-- `Streaming memory`：streaming 驻留和内存曲线。
-- `Profiler`：CPU/GPU profiler 视图。
-- `Log`：运行日志。
-- `Debug`：shader readback 和调试值。
+可以看到 P1-P10 颜色分布和数量统计。Runtime / Cache Parameters 中的 Feature Retention Output 还会显示：
 
-菜单支持打开模型、重新加载、保存/删除 cache、重编 shader、切换 VSync 和退出。
+```text
+Semantic boosted
+Semantic suppressed
+Avg semantic delta
+```
 
-## 开发备注
+这些指标用于判断底层语义结构代价是否过强。正常情况下，优化后的保守版不应该出现大面积 `Semantic boosted`。
 
-- `build`、`_bin` 被 `.gitignore` 忽略。
-- `thirdparty/vulkan_radix_sort` 的 `.cc` 被直接编入主可执行文件，不是通过它自己的 CMake target 链接。
-- `thirdparty/vulkan_radix_sort/src/generated` 下的 shader header 需要存在。
-- 项目要求 Vulkan header version 至少为 309，对应 Vulkan SDK `>= 1.4.309.0`。
-- CMake 会把 `shaders` 和 nvshaders 相关文件复制到 runtime/install 目录。
-- 修改 `shaders/interface` 中 CPU/GPU 共享结构时，需要同步检查 C++ 侧结构、buffer layout、descriptor binding 和 shader 使用点。
-- 修改 LOD/cluster 配置会触发 scene 或 renderer 重建，较大模型可能耗时明显，建议先使用 processing-only 生成 cache。
+## Cache 注意事项
 
-## 相关文档
+当前几何 cache 版本为 `13`。语义结构代价策略更新后，旧 cache 会自动失效并重新构建，避免继续使用旧的强约束结果。
 
-- [POINTNEXT_POINTCLIPV2_SEMANTIC_LOD_FULL_WORKFLOW.md](POINTNEXT_POINTCLIPV2_SEMANTIC_LOD_FULL_WORKFLOW.md)：PointNeXt + PointCLIP V2 + fused 策略的完整执行流程。
-- [SEMANTIC_LOD_STRATEGY_TECHNICAL_ANALYSIS.md](SEMANTIC_LOD_STRATEGY_TECHNICAL_ANALYSIS.md)：语义与结构感知 LOD 策略判断的关键技术点。
-- [docs/external-libraries-analysis.md](docs/external-libraries-analysis.md)：外部库功能使用分析。
-- [docs/src-shaders-reference.md](docs/src-shaders-reference.md)：源码和 shader 文件职责说明。
-- [docs/key-functions-blog.md](docs/key-functions-blog.md)：从关键函数视角理解项目主流程。
+如果你手动修改 fused CSV，项目也会通过语义 fingerprint 触发 cache mismatch 并重建。
+
+## 常用文档
+
+- [POINTNEXT_POINTCLIPV2_SEMANTIC_LOD_FULL_WORKFLOW.md](POINTNEXT_POINTCLIPV2_SEMANTIC_LOD_FULL_WORKFLOW.md)：完整推断、融合、导入和查看流程。
+- [SEMANTIC_LOD_STRATEGY_TECHNICAL_ANALYSIS.md](SEMANTIC_LOD_STRATEGY_TECHNICAL_ANALYSIS.md)：语义结构 LOD 策略的技术设计和底层约束分析。
+

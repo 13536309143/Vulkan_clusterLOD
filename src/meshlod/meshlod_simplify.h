@@ -464,8 +464,9 @@ static void analyzeFeatureConstraints(IterationContext& context)
 			importance = 1.0f;
 
 		float semantic_importance = importance;
-		const float semantic_confidence = context.config.semantic_confidence > 0.0f ? clampFeature01(context.config.semantic_confidence) : 1.0f;
-		const float semantic_blend = clampFeature01(context.config.semantic_structure_weight * (0.65f + 0.35f * semantic_confidence));
+		const float semantic_confidence = context.config.semantic_confidence > 0.0f ? clampFeature01(context.config.semantic_confidence) : 0.55f;
+		const float confidence_gate = clampFeature01((semantic_confidence - 0.25f) / 0.75f);
+		const float semantic_blend = clampFeature01(context.config.semantic_structure_weight * confidence_gate);
 
 		if (semantic_blend > 0.0f)
 		{
@@ -487,12 +488,21 @@ static void analyzeFeatureConstraints(IterationContext& context)
 
 			semantic_target = clampFeature01(semantic_target);
 			if (semantic_target > semantic_importance)
-				semantic_importance += (semantic_target - semantic_importance) * semantic_blend;
+			{
+				float max_boost = 0.08f;
+				if (context.config.semantic_priority >= 8)
+					max_boost = 0.16f;
+				else if (context.config.semantic_priority >= 6)
+					max_boost = 0.11f;
 
-			const bool preserves_function = non_manifold[w] || circular_hole[w] || functional_boundary[w] || boundary[w];
+				const float requested_boost = (semantic_target - semantic_importance) * semantic_blend;
+				semantic_importance += std::min(requested_boost, max_boost);
+			}
+
+			const bool preserves_function = non_manifold[w] || circular_hole[w] || functional_boundary[w] || boundary[w] || cylindrical[w] || thin_wall[w];
 			if (!preserves_function && context.config.semantic_bulk_suppression > 0.0f)
 			{
-				float suppression = context.config.semantic_bulk_suppression * (0.75f + 0.25f * semantic_confidence);
+				float suppression = context.config.semantic_bulk_suppression * confidence_gate;
 				semantic_importance *= clampFeature01(1.0f - suppression);
 			}
 		}
@@ -518,7 +528,7 @@ static void analyzeFeatureConstraints(IterationContext& context)
 			metrics.critical_vertices++;
 		}
 		else if (circular_hole[w] || importance >= context.config.feature_critical_threshold
-		         || (context.config.semantic_priority > 0 && (functional_boundary[w] || thin_wall[w])))
+		         || (context.config.semantic_priority >= 7 && (functional_boundary[w] || thin_wall[w])))
 		{
 			float score = importance;
 			if (circular_hole[w])
