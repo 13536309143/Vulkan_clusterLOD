@@ -588,9 +588,6 @@ bool Scene::endProcessingOnly(ProcessingInfo& processingInfo, bool hadError)
   m_processingStats.criticalVertices      = uint64_t(processingInfo.stats.criticalVertices);
   m_processingStats.featureImportanceSumPpm = uint64_t(processingInfo.stats.featureImportanceSumPpm);
   m_processingStats.featureImportanceMaxPpm = uint64_t(processingInfo.stats.featureImportanceMaxPpm);
-  m_processingStats.semanticBoostedVertices = uint64_t(processingInfo.stats.semanticBoostedVertices);
-  m_processingStats.semanticSuppressedVertices = uint64_t(processingInfo.stats.semanticSuppressedVertices);
-  m_processingStats.semanticImportanceDeltaSumPpm = uint64_t(processingInfo.stats.semanticImportanceDeltaSumPpm);
 
   if(!hadError)
   {

@@ -1526,7 +1526,6 @@ void LodClusters::onUIRender()
           double invVertices = 100.0 / double(std::max<uint64_t>(1, ps.inputFeatureVertices));
           double avgImportance = double(ps.featureImportanceSumPpm) / double(std::max<uint64_t>(1, ps.inputFeatureVertices)) / 1000000.0;
           double maxImportance = double(ps.featureImportanceMaxPpm) / 1000000.0;
-          double avgSemanticDelta = double(ps.semanticImportanceDeltaSumPpm) / double(std::max<uint64_t>(1, ps.inputFeatureVertices)) / 1000000.0;
           if(beginParamTable("##FeatureRetentionOutput"))
           {
             rowFmt("Input feature vertices", "{}", ps.inputFeatureVertices);
@@ -1543,9 +1542,6 @@ void LodClusters::onUIRender()
             rowFmt("Thin-wall vertices", "{} ({:.2f}%)", ps.thinWallVertices, double(ps.thinWallVertices) * invVertices);
             rowFmt("Protected vertices", "{} ({:.2f}%)", ps.protectedVertices, double(ps.protectedVertices) * invVertices);
             rowFmt("Critical vertices", "{} ({:.2f}%)", ps.criticalVertices, double(ps.criticalVertices) * invVertices);
-            rowFmt("Semantic boosted", "{} ({:.2f}%)", ps.semanticBoostedVertices, double(ps.semanticBoostedVertices) * invVertices);
-            rowFmt("Semantic suppressed", "{} ({:.2f}%)", ps.semanticSuppressedVertices, double(ps.semanticSuppressedVertices) * invVertices);
-            rowFmt("Avg semantic delta", "{:.4f}", avgSemanticDelta);
             rowFmt("Avg feature importance", "{:.4f}", avgImportance);
             rowFmt("Max feature importance", "{:.4f}", maxImportance);
             ImGui::EndTable();

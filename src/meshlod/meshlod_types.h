@@ -52,12 +52,6 @@ struct clodConfig
 	float semantic_confidence;
 	float feature_soft_scale;
 	float feature_hard_lock_ratio;
-	float semantic_structure_weight;
-	float semantic_boundary_weight;
-	float semantic_hole_weight;
-	float semantic_axis_weight;
-	float semantic_thin_wall_weight;
-	float semantic_bulk_suppression;
 	float hierarchy_depth_decay;
 	float hierarchy_min_ratio;
 };
@@ -80,9 +74,6 @@ struct clodFeatureMetrics
 	uint64_t critical_vertices = 0;
 	uint64_t feature_importance_sum_ppm = 0;
 	uint64_t feature_importance_max_ppm = 0;
-	uint64_t semantic_boosted_vertices = 0;
-	uint64_t semantic_suppressed_vertices = 0;
-	uint64_t semantic_importance_delta_sum_ppm = 0;
 };
 
 

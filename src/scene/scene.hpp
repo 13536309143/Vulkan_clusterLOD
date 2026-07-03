@@ -502,7 +502,7 @@ struct GroupView
 
   struct ProcessingStatsSnapshot
   {
-    static const uint32_t version = 3;
+    static const uint32_t version = 2;
 
     uint64_t groups                = 0;
     uint64_t clusters              = 0;
@@ -533,9 +533,6 @@ struct GroupView
     uint64_t criticalVertices      = 0;
     uint64_t featureImportanceSumPpm = 0;
     uint64_t featureImportanceMaxPpm = 0;
-    uint64_t semanticBoostedVertices = 0;
-    uint64_t semanticSuppressedVertices = 0;
-    uint64_t semanticImportanceDeltaSumPpm = 0;
 
   };
 
@@ -609,12 +606,6 @@ struct GroupView
     float    featureCriticalThreshold = 0.93f;
     float    featureSoftScale = 1.0f;
     float    featureHardLockRatio = 0.10f;
-    float    semanticStructureWeight = 0.0f;
-    float    semanticBoundaryWeight = 1.0f;
-    float    semanticHoleWeight = 1.0f;
-    float    semanticAxisWeight = 1.0f;
-    float    semanticThinWallWeight = 1.0f;
-    float    semanticBulkSuppression = 0.0f;
     float    hierarchyDepthDecay = 0.02f;
     float    hierarchyMinRatio = 0.42f;
     uint32_t partitionSize = 16;
@@ -714,7 +705,7 @@ struct GeometryStorage : GeometryBase
     struct Header
     {
       uint64_t magic               = 0x006f65676e73766eULL;
-      uint32_t geoVersion          = 13;
+      uint32_t geoVersion          = 12;
       uint32_t geoStructSize       = uint32_t(sizeof(GeometryView));
       uint32_t configVersion       = SceneConfig::version;
       uint32_t configStructSize    = uint32_t(sizeof(SceneConfig));
@@ -733,7 +724,7 @@ struct GeometryStorage : GeometryBase
     SceneConfig             config;
     Histograms              histograms;
     ProcessingStatsSnapshot processingStats;
-    uint32_t                pad[5];
+    uint32_t                pad[7];
   };
 
   static_assert(sizeof(CacheFileHeader) % serialization::ALIGNMENT == 0, "CacheFileHeader size unaligned");
@@ -872,9 +863,6 @@ struct ProcessingInfo
       std::atomic_uint64_t criticalVertices      = 0;
       std::atomic_uint64_t featureImportanceSumPpm = 0;
       std::atomic_uint64_t featureImportanceMaxPpm = 0;
-      std::atomic_uint64_t semanticBoostedVertices = 0;
-      std::atomic_uint64_t semanticSuppressedVertices = 0;
-      std::atomic_uint64_t semanticImportanceDeltaSumPpm = 0;
     } stats;
 
 

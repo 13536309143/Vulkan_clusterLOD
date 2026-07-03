@@ -624,9 +624,6 @@ namespace lodclusters {
      processingInfo.stats.protectedVertices += featureMetrics.protected_vertices;
      processingInfo.stats.criticalVertices += featureMetrics.critical_vertices;
      processingInfo.stats.featureImportanceSumPpm += featureMetrics.feature_importance_sum_ppm;
-     processingInfo.stats.semanticBoostedVertices += featureMetrics.semantic_boosted_vertices;
-     processingInfo.stats.semanticSuppressedVertices += featureMetrics.semantic_suppressed_vertices;
-     processingInfo.stats.semanticImportanceDeltaSumPpm += featureMetrics.semantic_importance_delta_sum_ppm;
      uint64_t previousMax = processingInfo.stats.featureImportanceMaxPpm.load();
      while(previousMax < featureMetrics.feature_importance_max_ppm
            && !processingInfo.stats.featureImportanceMaxPpm.compare_exchange_weak(previousMax, featureMetrics.feature_importance_max_ppm))
