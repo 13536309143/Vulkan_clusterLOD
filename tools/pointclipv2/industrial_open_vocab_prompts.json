@@ -1,13 +1,11 @@
 {
   "templates": [
-    "a depth rendering of a {name}.",
-    "a 3D CAD model of a {name}.",
-    "a 3D industrial mechanical part: {name}.",
-    "a point cloud projection of a {name}.",
-    "a multi-view rendering of a {name}.",
-    "a mechanical assembly component: {name}.",
-    "an engineering model component: {name}.",
-    "a GLB mesh object representing a {name}."
+    "a depth-map rendering of a mechanical {name}.",
+    "a multi-view CAD rendering of a {name}.",
+    "a point cloud projection of an industrial {name}.",
+    "an isolated 3D mechanical component: {name}.",
+    "a close-up engineering model of a {name}.",
+    "a rendered industrial machine part: {name}."
   ],
   "labels": [
     {

@@ -176,8 +176,6 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
   static const float criticalByPriority[] = {0.93f, 0.995f, 0.985f, 0.97f, 0.95f, 0.93f, 0.90f, 0.88f, 0.85f, 0.82f, 0.78f};
   static const float softByPriority[]     = {1.00f, 0.35f, 0.45f, 0.60f, 0.75f, 1.00f, 1.15f, 1.30f, 1.45f, 1.65f, 1.80f};
   static const float lockByPriority[]     = {1.00f, 0.010f, 0.018f, 0.035f, 0.060f, 0.090f, 0.120f, 0.160f, 0.190f, 0.240f, 0.300f};
-  static const float decayByPriority[]    = {0.000f, 0.080f, 0.070f, 0.060f, 0.045f, 0.030f, 0.024f, 0.018f, 0.014f, 0.010f, 0.006f};
-  static const float minByPriority[]      = {0.50f, 0.20f, 0.24f, 0.28f, 0.34f, 0.40f, 0.46f, 0.50f, 0.54f, 0.58f, 0.64f};
   static const uint32_t partitionByPriority[] = {16u, 24u, 24u, 22u, 20u, 16u, 14u, 12u, 11u, 10u, 8u};
 
   const uint32_t priority = std::min<uint32_t>(std::max<uint32_t>(policy.priority, 1), 10);
@@ -192,15 +190,19 @@ void derivePolicy(Scene::SemanticLodPolicy& policy)
     policy.flags |= SEMANTIC_LOD_LOW_CONF_BIT;
 
   const float stableRatio = simplifyByPriority[priority];
-  policy.simplifyRatio = clampf(stableRatio * 0.80f + policy.targetRatioMid * 0.20f, 0.30f, 0.82f);
+  const float nearRatio = clampf(policy.targetRatioNear, 0.24f, 0.96f);
+  const float midRatio  = clampf(policy.targetRatioMid, 0.06f, nearRatio);
+  const float farRatio  = clampf(policy.targetRatioFar, 0.02f, midRatio);
+
+  policy.simplifyRatio = clampf(nearRatio * 0.85f + stableRatio * 0.15f, 0.24f, 0.96f);
   policy.errorMergeScale = mergeByPriority[priority];
   policy.featureWeightScale = featureByPriority[priority];
   policy.featureProtectThreshold = protectByPriority[priority];
   policy.featureCriticalThreshold = criticalByPriority[priority];
   policy.featureSoftScale = softByPriority[priority];
   policy.featureHardLockRatio = lockByPriority[priority];
-  policy.hierarchyDepthDecay = decayByPriority[priority];
-  policy.hierarchyMinRatio = minByPriority[priority];
+  policy.hierarchyDepthDecay = clampf(std::max((nearRatio - midRatio) * 0.50f, (midRatio - farRatio) * 0.35f), 0.0f, 0.16f);
+  policy.hierarchyMinRatio = farRatio;
   policy.partitionSize = partitionByPriority[priority];
 
   if(policy.confidence > 0.0f && policy.confidence < 0.40f)
@@ -403,14 +405,14 @@ void Scene::applySemanticPolicyToConfig(clodConfig& config, const SemanticLodPol
   if(!policy.valid)
     return;
 
-  config.simplify_ratio = clampf(policy.simplifyRatio, 0.30f, 0.82f);
+  config.simplify_ratio = clampf(policy.simplifyRatio, 0.24f, 0.96f);
   config.simplify_error_merge_previous *= policy.errorMergeScale;
   config.semantic_priority = int(std::min<uint32_t>(std::max<uint32_t>(policy.priority, 1), 10));
   config.semantic_confidence = policy.confidence;
   config.feature_soft_scale = clampf(policy.featureSoftScale, 0.30f, 2.00f);
   config.feature_hard_lock_ratio = clampf(policy.featureHardLockRatio, 0.0f, 0.35f);
-  config.hierarchy_depth_decay = clampf(policy.hierarchyDepthDecay, 0.0f, 0.09f);
-  config.hierarchy_min_ratio = clampf(policy.hierarchyMinRatio, 0.18f, 0.70f);
+  config.hierarchy_depth_decay = clampf(policy.hierarchyDepthDecay, 0.0f, 0.16f);
+  config.hierarchy_min_ratio = clampf(policy.hierarchyMinRatio, 0.02f, 0.75f);
   config.partition_size = std::max<size_t>(8, std::min<size_t>(24, policy.partitionSize));
 
   if(config.feature_constraints)

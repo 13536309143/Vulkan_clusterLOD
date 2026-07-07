@@ -45,16 +45,19 @@ CONTROL_TYPES = {
 }
 
 P10_POLICY_TABLE = {
-    1: ("P1_micro_uncertain", 0.25, 0.08, 0.02, True, 0.40),
-    2: ("P2_repeated_fastener", 0.38, 0.16, 0.05, True, 0.55),
-    3: ("P3_large_static_bulk", 0.45, 0.22, 0.07, True, 0.65),
-    4: ("P4_ordinary_low_detail", 0.55, 0.28, 0.10, True, 0.80),
-    5: ("P5_balanced_visible", 0.65, 0.36, 0.16, False, 0.95),
-    6: ("P6_high_detail_shape", 0.74, 0.45, 0.22, False, 1.08),
-    7: ("P7_interface_fluid", 0.80, 0.52, 0.28, False, 1.18),
-    8: ("P8_structural_control", 0.84, 0.58, 0.34, False, 1.28),
-    9: ("P9_motion_precision", 0.92, 0.68, 0.42, False, 1.45),
-    10: ("P10_critical_preserve", 1.00, 0.80, 0.55, False, 1.65),
+    # name, near-ratio, mid-ratio, far-ratio, allow-cull, screen-error-weight
+    # P1/P2 are the only default cullable classes. P3/P4 can be simplified
+    # aggressively, but they often carry visible silhouette or occlusion mass.
+    1: ("P1_micro_uncertain", 0.30, 0.10, 0.03, True, 0.40),
+    2: ("P2_repeated_fastener", 0.42, 0.18, 0.06, True, 0.55),
+    3: ("P3_large_static_bulk", 0.55, 0.30, 0.12, False, 0.70),
+    4: ("P4_ordinary_low_detail", 0.60, 0.34, 0.15, False, 0.82),
+    5: ("P5_balanced_visible", 0.68, 0.42, 0.20, False, 0.98),
+    6: ("P6_high_detail_shape", 0.76, 0.50, 0.28, False, 1.12),
+    7: ("P7_interface_fluid", 0.82, 0.58, 0.36, False, 1.25),
+    8: ("P8_structural_control", 0.86, 0.64, 0.42, False, 1.38),
+    9: ("P9_motion_precision", 0.92, 0.74, 0.52, False, 1.55),
+    10: ("P10_critical_preserve", 0.96, 0.84, 0.65, False, 1.80),
 }
 
 ROLE_PROTOTYPES = {
@@ -145,6 +148,16 @@ CLASS_ROLE_PRIORS = {
     "joints_clamps_structural_connectors": {"structural_control": 0.80, "interface_fluid": 0.55},
     "plates_discs_shapes": {"large_static_bulk": 0.55, "ordinary_low_detail": 0.45, "balanced_visible": 0.35},
     "handles_controls": {"structural_control": 0.70, "high_detail_shape": 0.45, "balanced_visible": 0.35},
+}
+
+GENERIC_POINTCLIP_LABELS = {
+    "plain_rectangular_block",
+    "plain_disc",
+    "generic_mounting_pad",
+    "simple_cover_plate",
+    "simple_bracket",
+    "simple_plug",
+    "plain_cap",
 }
 
 
@@ -445,19 +458,36 @@ def semantic_role_scores(predicted_class: str, confidence: float, margin: float,
 
 def pointclip_role_scores(row: dict) -> dict[str, float]:
     role = row.get("pointclip_top1_role", "")
+    if role == "micro_uncertain":
+        return {}
     if role not in ROLE_PROTOTYPES:
         return {}
+    label_id = row.get("pointclip_top1_id", "")
     top1 = to_float(row, "pointclip_top1_score")
     top2 = to_float(row, "pointclip_top2_score")
     margin = to_float(row, "pointclip_margin", top1 - top2)
-    # CLIP probabilities are spread over an open vocabulary, so margin matters
-    # more than the absolute top-1 probability.
-    quality = clamp01(0.25 + 1.8 * top1 + 4.0 * max(margin, 0.0))
+
+    # CLIP probabilities are spread over an open vocabulary. Treat top-1 as
+    # supporting evidence only when either the absolute score or the margin is
+    # meaningful. This prevents broad labels from steering low-confidence parts.
+    if top1 < 0.055 and margin < 0.025:
+        return {}
+
+    top2_role = row.get("pointclip_top2_role", "")
+    score_quality = smoothstep(0.035, 0.14, top1)
+    margin_quality = smoothstep(0.006, 0.08, max(margin, 0.0))
+    quality = clamp01(0.55 * score_quality + 0.45 * margin_quality)
+    if top2_role == role:
+        quality = clamp01(quality + 0.10)
+    if label_id in GENERIC_POINTCLIP_LABELS:
+        quality *= 0.72
+    if quality < 0.25:
+        return {}
     scores = {role: quality}
 
-    second_role = row.get("pointclip_top2_role", "")
+    second_role = top2_role
     if second_role in ROLE_PROTOTYPES and second_role != role:
-        scores[second_role] = clamp01((0.15 + 1.2 * top2) * 0.55)
+        scores[second_role] = clamp01(smoothstep(0.035, 0.14, top2) * 0.35)
     return scores
 
 
@@ -551,7 +581,7 @@ def infer_structural_semantics(
             "gears_pulleys_chains",
             "motors_gearmotors",
             "springs",
-            "rotating_fluid_parts",
+            "rotating_fluid_machinery",
         } else "motion_precision"
         fused_scores[target_role] += 0.20
     if semantic == "fluid_or_interface_part" and reliable:

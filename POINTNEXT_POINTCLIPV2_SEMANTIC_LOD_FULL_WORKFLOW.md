@@ -5,7 +5,7 @@
 当前项目已经支持：
 
 - PointNeXt 对工业零件进行闭集分类。
-- PointCLIP V2 对同一批 mesh 做开放词表 zero-shot 推断。
+- PointCLIP V2 只对 PointNeXt 低置信或歧义 mesh 做开放词表 zero-shot 补充推断。
 - 结构特征提取，包括尺寸、面数、包围盒、细长性、扁平性、紧凑性、形状提示等。
 - 融合生成 `*_lod_constraints_fused.csv`。
 - C++ 运行时优先读取 fused 文件，再回退到普通 `*_lod_constraints.csv`。
@@ -17,15 +17,16 @@
 
 ```text
 工业 GLB 模型
-  -> PointNeXt 分支
+  -> PointNeXt 全量推断
        输出：*_pointnext_analysis.csv
        内容：闭集类别、置信度、几何结构特征
 
-  -> PointCLIP V2 分支
-       输出：*_pointclipv2_zeroshot.csv
+  -> PointCLIP V2 候选补充
+       输入：PointNeXt CSV 中未达到高置信或 margin 过低的 mesh
+       输出：*_pointclipv2_candidates.csv
        内容：开放词表 Top-k、role、score、margin
 
-  -> 融合脚本
+  -> 结构特征判断和融合脚本
        输入：PointNeXt CSV + PointCLIP V2 CSV
        输出：*_pointnext_pointclip_merged.csv
        输出：*_lod_constraints_fused.csv
@@ -38,7 +39,7 @@
        构建语义结构约束 LOD
 ```
 
-PointNeXt 和 PointCLIP V2 可以分开跑，也可以并行跑。融合步骤必须等两个分支 CSV 都生成后再执行。
+PointCLIP V2 依赖 PointNeXt 的置信度筛选，因此推荐在 PointNeXt 之后执行。融合步骤必须等 PointNeXt CSV 和 PointCLIP V2 候选 CSV 都生成后再执行。
 
 ## 2. 关键文件关系
 
@@ -50,9 +51,9 @@ _downloaded_resources\o1778.glb
 lod_analysis_outputs\o1778_pointnext_analysis.csv
 lod_analysis_outputs\o1778_pointnext_analysis.json
 
-lod_analysis_outputs\o1778_pointclipv2_zeroshot.csv
-lod_analysis_outputs\o1778_pointclipv2_zeroshot.json
-lod_analysis_outputs\o1778_pointclipv2_summary.csv
+lod_analysis_outputs\o1778_pointclipv2_candidates.csv
+lod_analysis_outputs\o1778_pointclipv2_candidates.json
+lod_analysis_outputs\o1778_pointclipv2_candidates_summary.csv
 
 lod_analysis_outputs\o1778_pointnext_pointclip_merged.csv
 lod_analysis_outputs\o1778_lod_constraints_fused.csv
@@ -192,20 +193,21 @@ python tools\pointclipv2\run_pointclipv2_zeroshot_glb.py ^
   --glb _downloaded_resources\<模型名>.glb ^
   --pointclip-root tools\pointclipv2\PointCLIP_V2 ^
   --prompt-json tools\pointclipv2\industrial_open_vocab_prompts.json ^
+  --candidate-csv lod_analysis_outputs\<模型名>_pointnext_analysis.csv ^
   --num-points 8192 ^
   --batch-size 8 ^
   --top-k 5 ^
-  --output-csv lod_analysis_outputs\<模型名>_pointclipv2_zeroshot.csv ^
-  --output-json lod_analysis_outputs\<模型名>_pointclipv2_zeroshot.json ^
-  --summary-csv lod_analysis_outputs\<模型名>_pointclipv2_summary.csv
+  --output-csv lod_analysis_outputs\<模型名>_pointclipv2_candidates.csv ^
+  --output-json lod_analysis_outputs\<模型名>_pointclipv2_candidates.json ^
+  --summary-csv lod_analysis_outputs\<模型名>_pointclipv2_candidates_summary.csv
 ```
 
 输出示例：
 
 ```text
-lod_analysis_outputs\<模型名>_pointclipv2_zeroshot.csv
-lod_analysis_outputs\<模型名>_pointclipv2_zeroshot.json
-lod_analysis_outputs\<模型名>_pointclipv2_summary.csv
+lod_analysis_outputs\<模型名>_pointclipv2_candidates.csv
+lod_analysis_outputs\<模型名>_pointclipv2_candidates.json
+lod_analysis_outputs\<模型名>_pointclipv2_candidates_summary.csv
 ```
 
 ### 4.3 融合阶段
@@ -217,7 +219,7 @@ lod_analysis_outputs\<模型名>_pointclipv2_summary.csv
 ```bat
 python tools\pointclipv2\fuse_pointnext_pointclip_lod.py ^
   --pointnext-csv lod_analysis_outputs\<模型名>_pointnext_analysis.csv ^
-  --pointclip-csv lod_analysis_outputs\<模型名>_pointclipv2_zeroshot.csv ^
+  --pointclip-csv lod_analysis_outputs\<模型名>_pointclipv2_candidates.csv ^
   --merged-csv lod_analysis_outputs\<模型名>_pointnext_pointclip_merged.csv ^
   --output-csv lod_analysis_outputs\<模型名>_lod_constraints_fused.csv ^
   --summary-json lod_analysis_outputs\<模型名>_lod_constraints_fused_summary.json
@@ -242,13 +244,13 @@ mesh_index
 运行时应看到类似：
 
 ```text
-Matched PointCLIP rows: 1778/1778
+Matched PointCLIP candidate rows: 920/1778
 Wrote: lod_analysis_outputs\o1778_pointnext_pointclip_merged.csv
 Wrote: lod_analysis_outputs\o1778_lod_constraints_fused.csv
 Wrote: lod_analysis_outputs\o1778_lod_constraints_fused_summary.json
 ```
 
-如果匹配数量小于总行数，说明 PointNeXt 和 PointCLIP V2 的 mesh 顺序或模型来源不一致，需要重新检查两个分支是否分析的是同一个 GLB。
+门控流程下，匹配数量小于总行数是正常现象，表示只有低置信或歧义 mesh 进入了 PointCLIP。只有当候选 CSV 本身不为空但匹配数量异常为 0 时，才需要检查两个分支是否分析的是同一个 GLB。
 
 ### 4.4 环境名覆盖
 
@@ -269,9 +271,9 @@ run_all_glb_pointnext_pointclipv2_fused.bat
 
 ### 4.5 跳过已有结果
 
-一键脚本默认会跳过已存在的 PointNeXt 和 PointCLIP V2 输出，避免重复跑耗时推断。融合阶段会重新生成 fused CSV，方便你调整策略融合逻辑后快速重建最终约束。
+一键脚本默认会跳过已存在的 PointNeXt 和 PointCLIP V2 候选输出，避免重复跑耗时推断。融合阶段会重新生成 fused CSV，方便你调整策略融合逻辑后快速重建最终约束。
 
-如果要强制重新推断，删除对应的 `*_pointnext_analysis.csv` 或 `*_pointclipv2_zeroshot.csv` 后重跑脚本。
+如果要强制重新推断，删除对应的 `*_pointnext_analysis.csv` 或 `*_pointclipv2_candidates.csv` 后重跑脚本。
 
 ## 5. 单个模型命令
 
@@ -299,12 +301,13 @@ python tools\pointclipv2\run_pointclipv2_zeroshot_glb.py ^
   --glb _downloaded_resources\o1778.glb ^
   --pointclip-root tools\pointclipv2\PointCLIP_V2 ^
   --prompt-json tools\pointclipv2\industrial_open_vocab_prompts.json ^
+  --candidate-csv lod_analysis_outputs\o1778_pointnext_analysis.csv ^
   --num-points 8192 ^
   --batch-size 8 ^
   --top-k 5 ^
-  --output-csv lod_analysis_outputs\o1778_pointclipv2_zeroshot.csv ^
-  --output-json lod_analysis_outputs\o1778_pointclipv2_zeroshot.json ^
-  --summary-csv lod_analysis_outputs\o1778_pointclipv2_summary.csv
+  --output-csv lod_analysis_outputs\o1778_pointclipv2_candidates.csv ^
+  --output-json lod_analysis_outputs\o1778_pointclipv2_candidates.json ^
+  --summary-csv lod_analysis_outputs\o1778_pointclipv2_candidates_summary.csv
 ```
 
 ### 5.3 融合
@@ -312,7 +315,7 @@ python tools\pointclipv2\run_pointclipv2_zeroshot_glb.py ^
 ```bat
 python tools\pointclipv2\fuse_pointnext_pointclip_lod.py ^
   --pointnext-csv lod_analysis_outputs\o1778_pointnext_analysis.csv ^
-  --pointclip-csv lod_analysis_outputs\o1778_pointclipv2_zeroshot.csv ^
+  --pointclip-csv lod_analysis_outputs\o1778_pointclipv2_candidates.csv ^
   --merged-csv lod_analysis_outputs\o1778_pointnext_pointclip_merged.csv ^
   --output-csv lod_analysis_outputs\o1778_lod_constraints_fused.csv ^
   --summary-json lod_analysis_outputs\o1778_lod_constraints_fused_summary.json

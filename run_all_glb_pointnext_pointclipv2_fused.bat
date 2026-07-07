@@ -73,7 +73,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo ===== Stage 2/3: PointCLIP V2 zero-shot for all GLB files =====
+echo ===== Stage 2/3: PointCLIP V2 zero-shot for low-confidence PointNeXt rows =====
 echo Activating conda environment: %POINTCLIP_CONDA_ENV%
 call conda activate %POINTCLIP_CONDA_ENV%
 if errorlevel 1 (
@@ -94,19 +94,20 @@ for %%G in ("%RESOURCES_DIR%\*.glb") do (
   set "STEM=!STEM: =_!"
   echo.
   echo ===== PointCLIPV2 %%~nxG =====
-  if exist "%OUT%\!STEM!_pointclipv2_zeroshot.csv" (
-    echo Skip existing PointCLIPV2 output: %OUT%\!STEM!_pointclipv2_zeroshot.csv
+  if exist "%OUT%\!STEM!_pointclipv2_candidates.csv" (
+    echo Skip existing PointCLIPV2 candidate output: %OUT%\!STEM!_pointclipv2_candidates.csv
   ) else (
     python tools\pointclipv2\run_pointclipv2_zeroshot_glb.py ^
       --glb "%%~fG" ^
       --pointclip-root "%POINTCLIP_ROOT%" ^
       --prompt-json "%POINTCLIP_PROMPTS%" ^
+      --candidate-csv "%OUT%\!STEM!_pointnext_analysis.csv" ^
       --num-points 8192 ^
       --batch-size 8 ^
       --top-k 5 ^
-      --output-csv "%OUT%\!STEM!_pointclipv2_zeroshot.csv" ^
-      --output-json "%OUT%\!STEM!_pointclipv2_zeroshot.json" ^
-      --summary-csv "%OUT%\!STEM!_pointclipv2_summary.csv"
+      --output-csv "%OUT%\!STEM!_pointclipv2_candidates.csv" ^
+      --output-json "%OUT%\!STEM!_pointclipv2_candidates.json" ^
+      --summary-csv "%OUT%\!STEM!_pointclipv2_candidates_summary.csv"
     if errorlevel 1 (
       echo PointCLIPV2 failed for %%~nxG
       exit /b 1
@@ -125,13 +126,13 @@ for %%G in ("%RESOURCES_DIR%\*.glb") do (
     echo Missing PointNeXt CSV: %OUT%\!STEM!_pointnext_analysis.csv
     exit /b 1
   )
-  if not exist "%OUT%\!STEM!_pointclipv2_zeroshot.csv" (
-    echo Missing PointCLIPV2 CSV: %OUT%\!STEM!_pointclipv2_zeroshot.csv
+  if not exist "%OUT%\!STEM!_pointclipv2_candidates.csv" (
+    echo Missing PointCLIPV2 candidate CSV: %OUT%\!STEM!_pointclipv2_candidates.csv
     exit /b 1
   )
   python tools\pointclipv2\fuse_pointnext_pointclip_lod.py ^
     --pointnext-csv "%OUT%\!STEM!_pointnext_analysis.csv" ^
-    --pointclip-csv "%OUT%\!STEM!_pointclipv2_zeroshot.csv" ^
+    --pointclip-csv "%OUT%\!STEM!_pointclipv2_candidates.csv" ^
     --merged-csv "%OUT%\!STEM!_pointnext_pointclip_merged.csv" ^
     --output-csv "%OUT%\!STEM!_lod_constraints_fused.csv" ^
     --summary-json "%OUT%\!STEM!_lod_constraints_fused_summary.json"

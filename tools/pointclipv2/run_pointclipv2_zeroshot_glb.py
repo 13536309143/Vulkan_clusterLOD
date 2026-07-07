@@ -17,7 +17,7 @@ import struct
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 # PyTorch, NumPy/MKL, and CLIP can load different OpenMP runtimes on Windows.
 # This script is an offline inference tool, so allowing duplicate OpenMP
@@ -54,6 +54,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-csv", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, default=None)
     parser.add_argument("--summary-csv", type=Path, default=None)
+    parser.add_argument(
+        "--candidate-csv",
+        type=Path,
+        default=None,
+        help="Optional PointNeXt analysis CSV. If set, only non-high-confidence rows are sent to PointCLIP.",
+    )
+    parser.add_argument(
+        "--candidate-high-confidence",
+        type=float,
+        default=0.70,
+        help="PointNeXt confidence threshold for skipping PointCLIP.",
+    )
+    parser.add_argument(
+        "--candidate-low-margin",
+        type=float,
+        default=0.08,
+        help="PointNeXt top1-top2 margin threshold for skipping PointCLIP.",
+    )
+    parser.add_argument(
+        "--exclude-roles",
+        default="micro_uncertain",
+        help="Comma-separated prompt roles excluded from CLIP matching. Use an empty string to disable.",
+    )
     parser.add_argument("--num-points", type=int, default=8192)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--top-k", type=int, default=5)
@@ -73,14 +96,42 @@ def add_import_paths(args: argparse.Namespace) -> None:
             sys.path.insert(0, text)
 
 
-def load_prompt_library(path: Path) -> Tuple[List[Dict], List[str]]:
+def parse_role_filter(text: str) -> Set[str]:
+    return {item.strip() for item in text.split(",") if item.strip()}
+
+
+def load_prompt_library(path: Path, exclude_roles: Set[str]) -> Tuple[List[Dict], List[str]]:
     with path.open("r", encoding="utf-8") as file:
         data = json.load(file)
     templates = data.get("templates") or ["a 3D object: {name}."]
-    labels = data.get("labels") or []
+    labels = [
+        label for label in (data.get("labels") or [])
+        if label.get("role", "") not in exclude_roles
+    ]
     if not labels:
         raise ValueError(f"No labels found in prompt library: {path}")
     return labels, templates
+
+
+def candidate_keys_from_pointnext(
+    path: Path,
+    high_confidence: float,
+    low_margin: float,
+) -> Tuple[Set[Tuple[str, str, str]], Counter]:
+    keys: Set[Tuple[str, str, str]] = set()
+    counts = Counter()
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
+        for row in csv.DictReader(file):
+            confidence = float(row.get("confidence") or 0.0)
+            second = float(row.get("second_confidence") or 0.0)
+            margin = confidence - second
+            high_reliable = confidence >= high_confidence and margin >= low_margin
+            if high_reliable:
+                counts["skipped_high_confidence"] += 1
+                continue
+            keys.add((str(row.get("order", "")), str(row.get("node_index", "")), str(row.get("mesh_index", ""))))
+            counts["pointclip_candidates"] += 1
+    return keys, counts
 
 
 def prompts_for_label(label: Dict, templates: List[str]) -> List[str]:
@@ -328,7 +379,23 @@ def main() -> None:
     from clip import clip
     from trainers.mv_utils_zs import Realistic_Projection
 
-    labels, templates = load_prompt_library(args.prompt_json)
+    excluded_roles = parse_role_filter(args.exclude_roles)
+    labels, templates = load_prompt_library(args.prompt_json, excluded_roles)
+    if excluded_roles:
+        print(f"PointCLIP prompt role filter: excluded {sorted(excluded_roles)}, using {len(labels)} labels")
+    candidate_keys: Optional[Set[Tuple[str, str, str]]] = None
+    if args.candidate_csv:
+        candidate_keys, candidate_counts = candidate_keys_from_pointnext(
+            args.candidate_csv,
+            args.candidate_high_confidence,
+            args.candidate_low_margin,
+        )
+        print(
+            "PointCLIP candidate gate: "
+            f"{candidate_counts['pointclip_candidates']} candidates, "
+            f"{candidate_counts['skipped_high_confidence']} high-confidence rows skipped"
+        )
+
     device = torch.device(args.device)
     model, _ = clip.load(args.backbone, device=device)
     model.eval()
@@ -355,10 +422,13 @@ def main() -> None:
 
     with args.glb.open("rb") as glb_file, mmap.mmap(glb_file.fileno(), 0, access=mmap.ACCESS_READ) as mm:
         for order, (node_index, node) in enumerate(mesh_nodes, start=1):
+            mesh_index = int(node["mesh"])
+            if candidate_keys is not None and (str(order), str(node_index), str(mesh_index)) not in candidate_keys:
+                continue
             vertices, faces = mesh_for_node(gltf, mm, bin_offset, node)
             if len(vertices) == 0:
                 continue
-            mesh = gltf["meshes"][node["mesh"]]
+            mesh = gltf["meshes"][mesh_index]
             rng = np.random.default_rng(args.seed + int(node_index))
             points = sample_points(vertices, faces, args.num_points, rng)
             pending_points.append(normalize_points(points))
@@ -366,8 +436,8 @@ def main() -> None:
                 "order": order,
                 "node_index": node_index,
                 "node_name": node.get("name", f"node_{node_index}"),
-                "mesh_index": int(node["mesh"]),
-                "mesh_name": mesh.get("name", f"mesh_{node['mesh']}"),
+                "mesh_index": mesh_index,
+                "mesh_name": mesh.get("name", f"mesh_{mesh_index}"),
             })
             if len(pending_points) >= args.batch_size:
                 flush()

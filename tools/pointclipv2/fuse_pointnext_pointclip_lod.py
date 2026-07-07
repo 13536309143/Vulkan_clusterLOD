@@ -86,7 +86,7 @@ def merge_rows(pointnext_rows: List[dict], pointclip_rows: List[dict]) -> List[d
             })
             out["pointclip_matched"] = "0"
         merged.append(out)
-    print(f"Matched PointCLIP rows: {matched}/{len(pointnext_rows)}")
+    print(f"Matched PointCLIP candidate rows: {matched}/{len(pointnext_rows)}")
     return merged
 
 
