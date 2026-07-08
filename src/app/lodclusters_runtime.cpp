@@ -69,7 +69,9 @@ void LodClusters::handleChanges()
   }
 
   bool sceneChanged = false;
-  if(memcmp(&m_sceneConfig, &m_sceneConfigLast, sizeof(m_sceneConfig)))
+  bool sceneReloadRequested = m_reloadScene;
+  m_reloadScene = false;
+  if(sceneReloadRequested || memcmp(&m_sceneConfig, &m_sceneConfigLast, sizeof(m_sceneConfig)))
   {
     sceneChanged = true;
 
@@ -164,7 +166,7 @@ void LodClusters::handleChanges()
   }
 
 
-  bool hadChange = shaderChanged || memcmp(&m_tweakLast, &m_tweak, sizeof(m_tweak))
+  bool hadChange = sceneReloadRequested || shaderChanged || memcmp(&m_tweakLast, &m_tweak, sizeof(m_tweak))
                    || memcmp(&m_rendererConfigLast, &m_rendererConfig, sizeof(m_rendererConfig))
                    || memcmp(&m_sceneConfigLast, &m_sceneConfig, sizeof(m_sceneConfig))
                    || memcmp(&m_streamingConfigLast, &m_streamingConfig, sizeof(m_streamingConfig))

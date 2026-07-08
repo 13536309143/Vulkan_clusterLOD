@@ -32,6 +32,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--high-confidence", type=float, default=0.70)
     parser.add_argument("--low-confidence", type=float, default=0.40)
     parser.add_argument("--low-margin", type=float, default=0.08)
+    parser.add_argument(
+        "--evidence-mode",
+        choices=[
+            "pointnext",
+            "pointclip",
+            "pointnext_structure",
+            "pointclip_structure",
+            "pointnext_pointclip",
+            "pointnext_pointclip_structure",
+        ],
+        default="pointnext_pointclip_structure",
+        help="Ablation mode controlling which evidence sources affect final P1-P10 policy selection.",
+    )
     return parser.parse_args()
 
 

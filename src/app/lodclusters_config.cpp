@@ -60,6 +60,7 @@ LodClusters::LodClusters(const Info& info)
   m_info.parameterRegistry->add({"featureimportanceweight"}, &m_sceneConfig.featureImportanceWeight);
   m_info.parameterRegistry->add({"featureprotectthreshold"}, &m_sceneConfig.featureProtectThreshold);
   m_info.parameterRegistry->add({"featurecriticalthreshold"}, &m_sceneConfig.featureCriticalThreshold);
+  m_info.parameterRegistry->add({"semanticlodmode"}, &m_sceneConfig.semanticLodMode);
 
   m_info.parameterRegistry->add({"loderror"}, &m_frameConfig.lodPixelError);
   m_info.parameterRegistry->add({"shadowray"}, &m_frameConfig.frameConstants.doShadow);

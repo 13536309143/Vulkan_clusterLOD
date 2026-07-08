@@ -61,6 +61,27 @@ std::string formatMetric(size_t size)
     return fmt::format("{}", size);
 }
 
+const char* semanticLodModeName(uint32_t mode)
+{
+  switch(mode)
+  {
+    case SEMANTIC_LOD_POINTNEXT:
+      return "PointNeXt";
+    case SEMANTIC_LOD_POINTCLIP:
+      return "PointCLIP";
+    case SEMANTIC_LOD_POINTNEXT_STRUCTURE:
+      return "PointNeXt + structure";
+    case SEMANTIC_LOD_POINTCLIP_STRUCTURE:
+      return "PointCLIP + structure";
+    case SEMANTIC_LOD_POINTNEXT_POINTCLIP:
+      return "PointNeXt + PointCLIP";
+    case SEMANTIC_LOD_POINTNEXT_POINTCLIP_STRUCTURE:
+      return "PointNeXt + PointCLIP + structure";
+    default:
+      return "PointNeXt + PointCLIP + structure";
+  }
+}
+
 template <typename T, typename Tcont>
 
 void uiPlot(const std::string& plotName, const std::string& tooltipFormat, const Tcont& data, const T& maxValue, int offset = 0, size_t sizeOverride = 0)
@@ -550,6 +571,11 @@ void LodClusters::onUIRender()
 
       PE::Text("Current Config:", "%dT_%dV", m_sceneConfigEdit.clusterTriangles, m_sceneConfigEdit.clusterVertices);
 
+      PE::entry("Semantic LOD Strategy", [&]() {
+        return m_ui.enumCombobox(GUI_SEMANTIC_LOD_MODE, "semantic lod strategy",
+                                 &m_sceneConfigEdit.semanticLodMode);
+      }, "Selects which ablation policy CSV is loaded before rebuilding LOD data");
+
 
       if(PE::treeNode("Compression settings"))
       {
@@ -594,6 +620,13 @@ void LodClusters::onUIRender()
       }
 
       ImGui::EndDisabled();
+
+      if(PE::entry("", [&] { return ImGui::Button("Reload Strategy", buttonSize); },
+                   "Reloads the scene using the selected semantic LOD strategy"))
+      {
+        m_sceneConfig = m_sceneConfigEdit;
+        m_reloadScene = true;
+      }
 
 
       PE::end();
@@ -1362,6 +1395,7 @@ void LodClusters::onUIRender()
             rowFmt("LOD decimation", "{:.3f}", cfg.lodLevelDecimationFactor);
             rowFmt("Assembly min instances", "{}", cfg.assemblyCullingMinInstances);
             rowFmt("Assembly LOD pixels", "{:.2f}", cfg.assemblyLodPixelThreshold);
+            rowText("Semantic LOD mode", semanticLodModeName(cfg.semanticLodMode));
             rowBool("Feature constraints", cfg.featureConstraints);
             rowFmt("Feature importance weight", "{:.2f}", cfg.featureImportanceWeight);
             rowFmt("Feature protect threshold", "{:.2f}", cfg.featureProtectThreshold);

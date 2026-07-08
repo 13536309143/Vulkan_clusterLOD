@@ -120,6 +120,7 @@ public:
     GUI_SUPERSAMPLE,
     GUI_MESHLET,
     GUI_VISUALIZE,
+    GUI_SEMANTIC_LOD_MODE,
   };
 
 
@@ -233,6 +234,7 @@ private:
   nvutils::PerformanceTimer m_clock;
 
   bool m_reloadShaders = false;
+  bool m_reloadScene   = false;
 #ifndef NDEBUG
   bool m_showDebugUI = true;
 #else

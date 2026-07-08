@@ -160,6 +160,15 @@ GENERIC_POINTCLIP_LABELS = {
     "plain_cap",
 }
 
+EVIDENCE_MODES = {
+    "pointnext": "PointNeXt only",
+    "pointclip": "PointCLIP only",
+    "pointnext_structure": "PointNeXt + structure",
+    "pointclip_structure": "PointCLIP + structure",
+    "pointnext_pointclip": "PointNeXt + PointCLIP",
+    "pointnext_pointclip_structure": "PointNeXt + PointCLIP + structure",
+}
+
 
 def make_p10_policy(priority: int, strategy: str) -> dict:
     name, near, mid, far, allow_cull, screen_error_weight = P10_POLICY_TABLE[priority]
@@ -210,6 +219,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.08,
         help="If top1-top2 confidence is below this, mark semantic prediction as ambiguous.",
+    )
+    parser.add_argument(
+        "--evidence-mode",
+        choices=sorted(EVIDENCE_MODES),
+        default="pointnext_pointclip_structure",
+        help="Ablation mode controlling which evidence sources may affect P1-P10 policy selection.",
     )
     return parser.parse_args()
 
@@ -456,9 +471,9 @@ def semantic_role_scores(predicted_class: str, confidence: float, margin: float,
     return {role: clamp01(prior * evidence_quality) for role, prior in priors.items()}
 
 
-def pointclip_role_scores(row: dict) -> dict[str, float]:
+def pointclip_role_scores(row: dict, include_micro_uncertain: bool = False) -> dict[str, float]:
     role = row.get("pointclip_top1_role", "")
-    if role == "micro_uncertain":
+    if role == "micro_uncertain" and not include_micro_uncertain:
         return {}
     if role not in ROLE_PROTOTYPES:
         return {}
@@ -628,6 +643,137 @@ def infer_structural_semantics(
     }
 
 
+def add_weighted_scores(dst: dict[str, float], scores: dict[str, float], weight: float) -> float:
+    if not scores or weight <= 0.0:
+        return 0.0
+    for role, score in scores.items():
+        dst[role] = dst.get(role, 0.0) + clamp01(score) * weight
+    return weight
+
+
+def infer_ablation_semantics(
+    row: dict,
+    size_rank: int,
+    detail_rank: int,
+    reliable: bool,
+    semantic: str,
+    fallback: str,
+    margin: float,
+    evidence_mode: str,
+) -> dict:
+    predicted_class = row.get("predicted_class", "")
+    confidence = to_float(row, "confidence")
+    use_pointnext = "pointnext" in evidence_mode
+    use_pointclip = "pointclip" in evidence_mode
+    use_structure = "structure" in evidence_mode
+
+    features = structural_feature_vector(row, size_rank, detail_rank, reliable, margin, fallback)
+    structural_scores = {role: prototype_match_score(features, role) for role in ROLE_PROTOTYPES}
+    neural_scores = semantic_role_scores(predicted_class, confidence, margin, reliable)
+    pointclip_scores = pointclip_role_scores(row, include_micro_uncertain=use_pointclip and not use_pointnext)
+
+    fused_scores: dict[str, float] = {}
+    total_weight = 0.0
+    evidence_notes = []
+
+    if use_pointnext:
+        pointnext_weight = clamp01(0.25 + 0.75 * confidence) * (0.70 + 0.30 * clamp01(margin / 0.30))
+        if not reliable:
+            pointnext_weight *= 0.55
+            neural_scores = dict(neural_scores)
+            neural_scores["micro_uncertain"] = max(neural_scores.get("micro_uncertain", 0.0), 0.45)
+        if neural_scores:
+            total_weight += add_weighted_scores(fused_scores, neural_scores, pointnext_weight)
+            evidence_notes.append("pointnext")
+        else:
+            fused_scores["micro_uncertain"] = max(fused_scores.get("micro_uncertain", 0.0), 0.25)
+            evidence_notes.append("pointnext_no_prior")
+
+    if use_pointclip:
+        if pointclip_scores:
+            _, pointclip_score = best_role(pointclip_scores)
+            pointclip_weight = 0.35 + 0.65 * pointclip_score
+            total_weight += add_weighted_scores(fused_scores, pointclip_scores, pointclip_weight)
+            evidence_notes.append("pointclip")
+        else:
+            evidence_notes.append("pointclip_missing_or_weak")
+            if not use_pointnext and not use_structure:
+                fused_scores["micro_uncertain"] = max(fused_scores.get("micro_uncertain", 0.0), 1.0)
+
+    if use_structure:
+        structure_weight = 1.0 if not (use_pointnext or use_pointclip) else 0.70
+        total_weight += add_weighted_scores(fused_scores, structural_scores, structure_weight)
+        evidence_notes.append("structure")
+
+    if total_weight > 0.0:
+        fused_scores = {role: score / total_weight for role, score in fused_scores.items()}
+
+    if use_structure:
+        if features["bulk_score"] >= 0.70 and (not use_pointnext or semantic in {"bulk_static_part", "other_part", "semantic_uncertain"}):
+            fused_scores["large_static_bulk"] = fused_scores.get("large_static_bulk", 0.0) + 0.18
+        if features["micro_score"] >= 0.55 and (not use_pointnext or not reliable or semantic == "fastener_repeated"):
+            fused_scores["micro_uncertain"] = fused_scores.get("micro_uncertain", 0.0) + 0.22
+        if features["high_detail_score"] >= 0.78 and features["bulk_score"] < 0.55:
+            fused_scores["high_detail_shape"] = fused_scores.get("high_detail_shape", 0.0) + 0.12
+
+    if use_pointnext:
+        if semantic == "fastener_repeated" and reliable and (not use_structure or features["micro_score"] < 0.55):
+            fused_scores["repeated_fastener"] = fused_scores.get("repeated_fastener", 0.0) + 0.16
+        if semantic == "motion_or_precision_part" and reliable:
+            target_role = "critical_preserve" if predicted_class in {
+                "bearings_bushings_guides",
+                "gears_pulleys_chains",
+                "motors_gearmotors",
+                "springs",
+                "rotating_fluid_machinery",
+            } else "motion_precision"
+            fused_scores[target_role] = fused_scores.get(target_role, 0.0) + 0.20
+        if semantic == "fluid_or_interface_part" and reliable:
+            fused_scores["interface_fluid"] = fused_scores.get("interface_fluid", 0.0) + 0.18
+        if semantic == "structural_key_part" and reliable:
+            fused_scores["structural_control"] = fused_scores.get("structural_control", 0.0) + 0.16
+
+    role, fused_score = best_role({key: clamp01(value) for key, value in fused_scores.items()})
+    structural_role, structural_score = best_role(structural_scores)
+    neural_role, neural_score = best_role(neural_scores)
+    pointclip_role, pointclip_score = best_role(pointclip_scores) if pointclip_scores else ("", 0.0)
+
+    prototype = ROLE_PROTOTYPES[role]
+    policy = make_p10_policy(prototype["priority"], prototype["strategy"])
+    reasons = inference_reasons(
+        role,
+        features,
+        neural_role if use_pointnext else "",
+        neural_score if use_pointnext else 0.0,
+        structural_role if use_structure else "",
+        structural_score if use_structure else 0.0,
+        pointclip_role if use_pointclip else "",
+        pointclip_score if use_pointclip else 0.0,
+        semantic,
+        reliable,
+    )
+    reasons.append(f"evidence_mode={evidence_mode}")
+    rounded_features = {key: round(value, 4) for key, value in features.items()}
+
+    return {
+        "policy": policy,
+        "evidence_mode": evidence_mode,
+        "evidence_sources": ";".join(evidence_notes),
+        "inferred_role": role,
+        "function_role": prototype["function_role"],
+        "semantic_structural_score": round(fused_score, 4),
+        "neural_role": neural_role if use_pointnext else "",
+        "neural_role_score": round(neural_score, 4) if use_pointnext else 0.0,
+        "pointclip_role": pointclip_role if use_pointclip else "",
+        "pointclip_role_score": round(pointclip_score, 4) if use_pointclip else 0.0,
+        "structural_match_role": structural_role if use_structure else "",
+        "structural_match_score": round(structural_score, 4) if use_structure else 0.0,
+        "protected_features": json.dumps(prototype["protected_features"], ensure_ascii=False),
+        "inference_reason": ";".join(reasons),
+        "structural_features": json.dumps(rounded_features, ensure_ascii=False),
+    }
+
+
 def classify_row(row: dict, thresholds: dict, args: argparse.Namespace) -> dict:
     size_class, size_rank = classify_size(row, thresholds)
     confidence_class, reliable, margin = confidence_state(
@@ -636,7 +782,13 @@ def classify_row(row: dict, thresholds: dict, args: argparse.Namespace) -> dict:
     semantic = semantic_group(row.get("predicted_class", ""), reliable)
     fallback = geometry_fallback(row)
     detail_class, detail_rank = detail_level(row, thresholds)
-    inference = infer_structural_semantics(row, size_rank, detail_rank, reliable, semantic, fallback, margin)
+    evidence_mode = getattr(args, "evidence_mode", "pointnext_pointclip_structure")
+    if evidence_mode == "pointnext_pointclip_structure":
+        inference = infer_structural_semantics(row, size_rank, detail_rank, reliable, semantic, fallback, margin)
+        inference.setdefault("evidence_mode", evidence_mode)
+        inference.setdefault("evidence_sources", "pointnext;pointclip;structure")
+    else:
+        inference = infer_ablation_semantics(row, size_rank, detail_rank, reliable, semantic, fallback, margin, evidence_mode)
     policy = inference.pop("policy")
 
     small_low_conf_refined = size_rank <= 2 and not reliable

@@ -178,6 +178,13 @@ void LodClusters::onAttach(nvapp::Application* app)
 
     m_ui.enumAdd(GUI_VISUALIZE, VISUALIZE_SEMANTIC_LOD, "semantic lod policy");
 
+    m_ui.enumAdd(GUI_SEMANTIC_LOD_MODE, int(SEMANTIC_LOD_POINTNEXT), "PointNeXt");
+    m_ui.enumAdd(GUI_SEMANTIC_LOD_MODE, int(SEMANTIC_LOD_POINTCLIP), "PointCLIP");
+    m_ui.enumAdd(GUI_SEMANTIC_LOD_MODE, int(SEMANTIC_LOD_POINTNEXT_STRUCTURE), "PointNeXt + structure");
+    m_ui.enumAdd(GUI_SEMANTIC_LOD_MODE, int(SEMANTIC_LOD_POINTCLIP_STRUCTURE), "PointCLIP + structure");
+    m_ui.enumAdd(GUI_SEMANTIC_LOD_MODE, int(SEMANTIC_LOD_POINTNEXT_POINTCLIP), "PointNeXt + PointCLIP");
+    m_ui.enumAdd(GUI_SEMANTIC_LOD_MODE, int(SEMANTIC_LOD_POINTNEXT_POINTCLIP_STRUCTURE), "PointNeXt + PointCLIP + structure");
+
   }
 
 

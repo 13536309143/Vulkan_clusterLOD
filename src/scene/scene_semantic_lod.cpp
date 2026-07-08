@@ -258,10 +258,57 @@ void pushCsvNameCandidates(std::vector<std::filesystem::path>& candidates,
 {
   pushCandidate(candidates, seen, sceneDir / csvName);
   pushCandidate(candidates, seen, sceneDir / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, sceneDir / "lod_analysis_outputs" / "lod_ablation" / csvName);
   pushCandidate(candidates, seen, sceneDir.parent_path() / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, sceneDir.parent_path() / "lod_analysis_outputs" / "lod_ablation" / csvName);
   pushCandidate(candidates, seen, cwd / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd / "lod_analysis_outputs" / "lod_ablation" / csvName);
   pushCandidate(candidates, seen, cwd.parent_path() / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd.parent_path() / "lod_analysis_outputs" / "lod_ablation" / csvName);
   pushCandidate(candidates, seen, cwd.parent_path().parent_path() / "lod_analysis_outputs" / csvName);
+  pushCandidate(candidates, seen, cwd.parent_path().parent_path() / "lod_analysis_outputs" / "lod_ablation" / csvName);
+}
+
+const char* semanticModeSuffix(uint32_t mode)
+{
+  switch(mode)
+  {
+    case SEMANTIC_LOD_POINTNEXT:
+      return "_lod_constraints_1_pointnext.csv";
+    case SEMANTIC_LOD_POINTCLIP:
+      return "_lod_constraints_2_pointclip.csv";
+    case SEMANTIC_LOD_POINTNEXT_STRUCTURE:
+      return "_lod_constraints_3_pointnext_structure.csv";
+    case SEMANTIC_LOD_POINTCLIP_STRUCTURE:
+      return "_lod_constraints_4_pointclip_structure.csv";
+    case SEMANTIC_LOD_POINTNEXT_POINTCLIP:
+      return "_lod_constraints_5_pointnext_pointclip.csv";
+    case SEMANTIC_LOD_POINTNEXT_POINTCLIP_STRUCTURE:
+      return "_lod_constraints_6_pointnext_pointclip_structure.csv";
+    default:
+      return "_lod_constraints_6_pointnext_pointclip_structure.csv";
+  }
+}
+
+const char* semanticModeLabel(uint32_t mode)
+{
+  switch(mode)
+  {
+    case SEMANTIC_LOD_POINTNEXT:
+      return "PointNeXt";
+    case SEMANTIC_LOD_POINTCLIP:
+      return "PointCLIP";
+    case SEMANTIC_LOD_POINTNEXT_STRUCTURE:
+      return "PointNeXt + structure";
+    case SEMANTIC_LOD_POINTCLIP_STRUCTURE:
+      return "PointCLIP + structure";
+    case SEMANTIC_LOD_POINTNEXT_POINTCLIP:
+      return "PointNeXt + PointCLIP";
+    case SEMANTIC_LOD_POINTNEXT_POINTCLIP_STRUCTURE:
+      return "PointNeXt + PointCLIP + structure";
+    default:
+      return "PointNeXt + PointCLIP + structure";
+  }
 }
 
 }
@@ -273,13 +320,16 @@ void Scene::loadSemanticLodPolicies()
   m_semanticLodFingerprint = 0;
   m_semanticLodPath.clear();
 
-  const std::string fusedCsvName = m_filePath.stem().string() + "_lod_constraints_fused.csv";
-  const std::string csvName      = m_filePath.stem().string() + "_lod_constraints.csv";
+  const std::string stem = m_filePath.stem().string();
+  const std::string selectedCsvName = stem + semanticModeSuffix(m_config.semanticLodMode);
+  const std::string fusedCsvName    = stem + "_lod_constraints_fused.csv";
+  const std::string csvName         = stem + "_lod_constraints.csv";
   std::vector<std::filesystem::path> candidates;
   std::unordered_set<std::string> seen;
   const std::filesystem::path sceneDir = m_filePath.parent_path();
   const std::filesystem::path cwd = std::filesystem::current_path();
 
+  pushCsvNameCandidates(candidates, seen, sceneDir, cwd, selectedCsvName);
   pushCsvNameCandidates(candidates, seen, sceneDir, cwd, fusedCsvName);
   pushCsvNameCandidates(candidates, seen, sceneDir, cwd, csvName);
 
@@ -296,7 +346,8 @@ void Scene::loadSemanticLodPolicies()
 
   if(csvPath.empty())
   {
-    LOGI("Semantic LOD: no constraints CSV found for %s\n", m_filePath.filename().string().c_str());
+    LOGI("Semantic LOD: no constraints CSV found for %s using mode %s\n",
+         m_filePath.filename().string().c_str(), semanticModeLabel(m_config.semanticLodMode));
     return;
   }
 
@@ -373,8 +424,8 @@ void Scene::loadSemanticLodPolicies()
   m_semanticLodFingerprint = hashCombine(fingerprint, rows);
   m_semanticLodPath = csvPath;
 
-  LOGI("Semantic LOD: loaded %zu rows, %zu mesh policies from %s\n", rows, meshPolicies.size(),
-       nvutils::utf8FromPath(csvPath).c_str());
+  LOGI("Semantic LOD: loaded %zu rows, %zu mesh policies using mode %s from %s\n", rows, meshPolicies.size(),
+       semanticModeLabel(m_config.semanticLodMode), nvutils::utf8FromPath(csvPath).c_str());
 }
 
 const Scene::SemanticLodPolicy* Scene::findSemanticMeshPolicy(uint32_t meshIndex) const
